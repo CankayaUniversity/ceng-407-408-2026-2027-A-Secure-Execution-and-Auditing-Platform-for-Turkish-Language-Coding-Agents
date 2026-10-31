@@ -1,0 +1,4 @@
+p, secure_read_file, allow
+p, secure_edit_file, allow
+p, secure_list_files, allow
+p, secure_run_tests, allow
