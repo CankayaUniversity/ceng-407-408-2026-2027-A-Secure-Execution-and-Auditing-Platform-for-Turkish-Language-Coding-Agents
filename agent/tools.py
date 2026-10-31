@@ -1,7 +1,7 @@
-"""Day 1 tool schemas and proposals using Person 1's shared ToolCall contract.
+"""Tool schemas and proposals using the shared ToolCall contract.
 
 Only request data is created here. No filesystem, process, network, or database
-operation is performed. The Gateway adapter is a later integration task.
+operation is performed. Execution goes through the separate Gateway adapter.
 """
 
 from typing import Any
@@ -26,6 +26,7 @@ _TOOL_DEFINITIONS = (
     ("secure_run_tests", "Run a registered test profile.", RunTestsArguments),
 )
 SUPPORTED_TOOLS = frozenset(name for name, _, _ in _TOOL_DEFINITIONS)
+_ARGUMENT_MODELS = {name: model for name, _, model in _TOOL_DEFINITIONS}
 
 
 class UnsupportedToolError(ValueError):
@@ -58,6 +59,15 @@ def get_tool_schemas() -> list[dict[str, Any]]:
     ]
 
 
+def validate_tool_proposal(proposal: object) -> dict[str, Any]:
+    """Validate model-controlled fields without assigning backend identifiers."""
+    validated = _ToolProposal.model_validate(proposal)
+    if validated.tool not in SUPPORTED_TOOLS:
+        raise UnsupportedToolError(f"Unsupported tool: {validated.tool}")
+    arguments = _ARGUMENT_MODELS[validated.tool].model_validate(validated.arguments)
+    return {"tool": validated.tool, "arguments": arguments.model_dump(mode="json")}
+
+
 def make_tool_call(
     proposal: object,
     *,
@@ -65,12 +75,9 @@ def make_tool_call(
     request_id: str | None = None,
 ) -> ToolCall:
     """Reject unsupported proposals and build a validated shared ToolCall."""
-    validated = _ToolProposal.model_validate(proposal)
-    if validated.tool not in SUPPORTED_TOOLS:
-        raise UnsupportedToolError(f"Unsupported tool: {validated.tool}")
+    validated = validate_tool_proposal(proposal)
     return parse_tool_call({
         "request_id": request_id if request_id is not None else f"req-{uuid4().hex}",
         "task_id": task_id,
-        "tool": validated.tool,
-        "arguments": validated.arguments,
+        **validated,
     })
