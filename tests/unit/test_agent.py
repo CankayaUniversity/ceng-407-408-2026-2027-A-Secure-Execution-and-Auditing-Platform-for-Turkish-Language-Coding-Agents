@@ -1,9 +1,14 @@
-"""Person 2 Day 1 checks; no LLM service, Gateway, or database is needed."""
+
+
+from io import BytesIO
+import json
+from urllib.error import HTTPError, URLError
 
 import pytest
 from pydantic import ValidationError
 
 from agent.agent_loop import AgentLoop, MockLLM
+from agent.tool_adapter import GatewayError, SecureToolAdapter
 from agent.tools import UnsupportedToolError, get_tool_schemas, make_tool_call
 from secure_agent.common.schemas import ReadFileToolCall, parse_tool_call_json
 
@@ -126,14 +131,16 @@ def test_all_four_tools_build_the_existing_flat_tool_call_contract(tool, argumen
 
 def test_model_receives_goal_schemas_and_history_and_runs_start_fresh():
     class ObservingModel(MockLLM):
-        def propose(self, *, user_goal, tool_schemas, history):
+        def propose(self, *, user_goal, tool_schemas, history, tool_results):
             assert user_goal == "Dosyayı oku."
             assert len(tool_schemas) == 4
+            assert tool_results == ()
             if history:
                 assert len(history) == 1
                 assert history[0].tool == "secure_read_file"
             return super().propose(
-                user_goal=user_goal, tool_schemas=tool_schemas, history=history
+                user_goal=user_goal, tool_schemas=tool_schemas, history=history,
+                tool_results=tool_results,
             )
 
     loop = AgentLoop(ObservingModel(), task_id="task-001")
@@ -141,3 +148,132 @@ def test_model_receives_goal_schemas_and_history_and_runs_start_fresh():
     second = loop.run("Dosyayı oku.")
     assert len(first.tool_calls) == len(second.tool_calls) == 1
     assert first.tool_calls[0].request_id != second.tool_calls[0].request_id
+
+
+@pytest.fixture
+def gateway_response(monkeypatch):
+    """Capture HTTP requests and return the shared Gateway result contract."""
+    requests = []
+
+    def respond(request, *, timeout):
+        payload = json.loads(request.data)
+        requests.append((request, payload, timeout))
+        return BytesIO(json.dumps({
+            "request_id": payload["request_id"],
+            "status": "success",
+            "output": "Gateway sonucu: çalışma",
+            "source_id": "source-001",
+            "trust_level": "untrusted",
+        }, ensure_ascii=False).encode("utf-8"))
+
+    monkeypatch.setattr("agent.tool_adapter.urlopen", respond)
+    return requests
+
+
+@pytest.mark.parametrize("tool, arguments", [
+    ("secure_list_files", {"path": "."}),
+    ("secure_read_file", {"path": "notlar/çalışma.py"}),
+    ("secure_edit_file", {"path": "src/login.py", "content": "# Türkçe\n"}),
+    ("secure_run_tests", {"profile_id": "unit"}),
+])
+def test_all_four_tools_go_through_gateway(gateway_response, tool, arguments):
+    result = AgentLoop(
+        RepeatingModel({"tool": tool, "arguments": arguments}),
+        task_id="task-001", max_steps=1,
+        adapter=SecureToolAdapter("http://gateway:8000/", timeout=2),
+    ).run("İzinli işlemi yap.")
+
+    assert len(gateway_response) == 1
+    request, payload, timeout = gateway_response[0]
+    assert request.full_url == "http://gateway:8000/tools/execute"
+    assert request.get_method() == "POST"
+    assert request.get_header("Content-type") == "application/json"
+    assert timeout == 2
+    assert payload == result.tool_calls[0].model_dump(mode="json")
+    assert payload["tool"] == tool
+    assert payload["arguments"] == arguments
+    assert result.tool_results[0].request_id == payload["request_id"]
+    assert result.tool_results[0].output == "Gateway sonucu: çalışma"
+    assert result.tool_results[0].trust_level == "untrusted"
+    assert result.error is None
+
+
+def test_gateway_results_reach_model_and_runs_start_fresh(gateway_response):
+    class ObservingModel(MockLLM):
+        def propose(self, *, user_goal, tool_schemas, history, tool_results):
+            assert len(tool_results) == len(history)
+            if history:
+                assert tool_results[0].request_id == history[0].request_id
+                assert tool_results[0].output == "Gateway sonucu: çalışma"
+            return super().propose(
+                user_goal=user_goal, tool_schemas=tool_schemas,
+                history=history, tool_results=tool_results,
+            )
+
+    loop = AgentLoop(ObservingModel(), task_id="task-001", adapter=SecureToolAdapter())
+    for _ in range(2):
+        result = loop.run("README.md dosyasını oku.")
+        assert result.stop_reason == "model_finished"
+        assert len(result.tool_results) == 1
+
+
+@pytest.mark.parametrize("failure, expected", [
+    (TimeoutError(), "timed out"),
+    (URLError(TimeoutError()), "timed out"),
+    (URLError("Connection refused"), "connection failed"),
+    (ConnectionResetError(), "connection failed"),
+    (HTTPError("http://gateway/tools/execute", 422, "Invalid", {}, None), "HTTP 422"),
+    (HTTPError("http://gateway/tools/execute", 501, "Unavailable", {}, None), "HTTP 501"),
+    (HTTPError("http://gateway/tools/execute", 503, "Unavailable", {}, None), "HTTP 503"),
+])
+def test_gateway_failure_stops_agent_without_retry(monkeypatch, failure, expected):
+    attempts = []
+
+    def fail(request, *, timeout):
+        attempts.append(request)
+        raise failure
+
+    monkeypatch.setattr("agent.tool_adapter.urlopen", fail)
+    model = RepeatingModel()
+    result = AgentLoop(model, task_id="task-001", adapter=SecureToolAdapter()).run(
+        "Dosyayı oku."
+    )
+    assert result.stop_reason == "gateway_error"
+    assert expected in result.error
+    assert result.steps == model.invocations == len(attempts) == 1
+    assert len(result.tool_calls) == 1
+    assert result.tool_results == ()
+
+
+@pytest.mark.parametrize("body", [
+    b"not JSON",
+    b'{"status":"success"}',
+    json.dumps({
+        "request_id": "another-request", "status": "success", "output": "text",
+        "source_id": "source-001", "trust_level": "untrusted",
+    }).encode(),
+])
+def test_invalid_gateway_response_is_handled_by_agent(monkeypatch, body):
+    monkeypatch.setattr(
+        "agent.tool_adapter.urlopen", lambda request, timeout: BytesIO(body)
+    )
+    result = AgentLoop(MockLLM(), task_id="task-001", adapter=SecureToolAdapter()).run(
+        "Dosyayı oku."
+    )
+    assert result.stop_reason == "gateway_error"
+    assert result.error
+    assert result.tool_results == ()
+
+
+def test_http_error_preserves_status_code(monkeypatch):
+    def fail(request, *, timeout):
+        raise HTTPError(request.full_url, 501, "Unavailable", {}, None)
+
+    monkeypatch.setattr("agent.tool_adapter.urlopen", fail)
+    call = make_tool_call(
+        {"tool": "secure_read_file", "arguments": {"path": "README.md"}},
+        task_id="task-001",
+    )
+    with pytest.raises(GatewayError) as caught:
+        SecureToolAdapter().execute(call)
+    assert caught.value.status_code == 501
