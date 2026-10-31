@@ -1,0 +1,7 @@
+
+# Trusted test profiles for the secure execution prototype.
+# Executable commands are defined by the backend, not by the agent.
+
+profiles:
+  unit:
+    timeout_seconds: 30
