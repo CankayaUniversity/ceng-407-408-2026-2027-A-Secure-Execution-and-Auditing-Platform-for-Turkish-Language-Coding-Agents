@@ -25,6 +25,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     TypeAdapter,
 )
 
@@ -85,7 +86,7 @@ class ContractModel(BaseModel):
     """Base model that rejects unknown fields and incompatible data types.
 
     frozen=True prevents normal field assignment; it is not an authorization
-    boundary. These models also use immutable field types.
+    boundary. Nested audit metadata remains mutable.
     Do not use model_construct/model_copy(update=...) with untrusted input.
     """
 
@@ -252,3 +253,18 @@ class ToolResult(ContractModel):
     output: str
     source_id: NonEmptyText
     trust_level: TrustLevel
+
+
+class AuditEvent(ContractModel):
+    """Backend audit record; metadata must contain JSON-compatible values.
+
+    The backend generates event_id and a timezone-aware timestamp. Metadata
+    must not contain credentials or sensitive file contents. Frozen fields
+    do not prevent mutation of nested metadata dictionaries and lists.
+    """
+
+    event_id: NonEmptyText
+    request_id: NonEmptyText
+    event_type: NonEmptyText
+    timestamp: AwareDatetime
+    metadata: dict[str, JsonValue]

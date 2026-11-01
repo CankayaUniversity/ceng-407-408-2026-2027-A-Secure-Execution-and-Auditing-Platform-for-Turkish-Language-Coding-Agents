@@ -1,6 +1,6 @@
 # Shared API Contract
 
-**Contract version:** `0.1.0`  
+**Contract version:** `0.1.0`
 **Target runtime:** Python 3.11 and Pydantic v2  
 **Repository location:** `docs/api-contract.md`
 
@@ -438,7 +438,7 @@ These are Day 1 integration requirements. Their implementation must be checked w
 
 The normal tool-result data contract is `ToolResult`. The actual HTTP response envelope, domain-error status mappings, authentication mechanism, and validation-error body must be agreed with the Gateway owner and documented here when integrated. Do not infer them from Registry exceptions.
 
-The broader plan includes `PolicyDecision`, `GraphAssessment`, `SupervisorDecision`, and `AuditEvent`. They are not defined in the current `schemas.py`. Their owners must agree and implement shared definitions before consumers depend on them. In particular, do not claim that audit metadata or event-type validation is covered by these schema tests.
+The broader plan includes `PolicyDecision`, `GraphAssessment`, and `SupervisorDecision`. They are not defined in the current `schemas.py`. Their owners must agree and implement shared definitions before consumers depend on them. `AuditEvent` is defined in Section 13; SQLite storage is implemented and Gateway integration remains pending.
 
 In an integrated backend, validation and task-context resolution precede policy evaluation. Schema acceptance and registry lookup never grant execution on their own. Authentication, task ownership, policy, supervisor/graph decisions, permit checks, and sandbox controls remain the responsibilities of their respective components.
 
@@ -466,3 +466,52 @@ Day 1 completion requires all of the following:
 - The Gateway/Audit owners reconcile the open integration details in Section 11.
 
 Changes to required fields, tool names, argument semantics, permit encoding, or permission interpretation require team coordination and matching updates to source, tests, this document, and consumers. Update `SCHEMA_VERSION` when the shared data contract changes. Adding a field is not automatically backward-compatible because existing models reject unknown fields.
+
+
+## 13. AuditEvent
+
+**Model:** `AuditEvent` in `src/secure_agent/common/schemas.py`
+
+The Gateway creates this event after validating a ToolCall. The audit logger and
+repository stores it and looks it up by `request_id`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `event_id` | `NonEmptyText` | Backend-generated event identifier |
+| `request_id` | `NonEmptyText` | Request identifier copied from ToolCall |
+| `event_type` | `NonEmptyText` | Event name; receipt uses `tool_call_received` |
+| `timestamp` | `AwareDatetime` | Backend-generated time; use UTC |
+| `metadata` | `dict[str, JsonValue]` | JSON-compatible event details; receipt stores `task_id` and `tool` |
+
+All fields are required and follow the shared validation rules. The backend generates
+IDs and timestamps; the schema does not check uniqueness or request correlation.
+Use an aware datetime in Python or `AuditEvent.model_validate_json()` for JSON.
+Multiple events may share a request ID.
+
+The receipt event records no authorization or execution result. Its metadata contains
+only `task_id` and `tool` from the validated ToolCall, not arguments or file contents.
+Other stages may use other non-blank event names and JSON metadata. Nested metadata
+is mutable despite the frozen model. Gateway integration is pending.
+
+### SQLite repository
+
+`AuditRepository(database_path)` in `src/secure_agent/audit/repository.py` creates
+`audit_events` in a SQLite file. The parent directory must exist; `:memory:` is not supported.
+
+- `add(event: AuditEvent) -> None`: validate and commit an event.
+- `get_by_request_id(request_id: str) -> list[AuditEvent]`: return matching events
+  in insertion order, or an empty list.
+
+`event_id` is the primary key; `request_id` has a non-unique index. Timestamps are
+stored as ISO 8601 text with their timezone; metadata is stored as JSON text. Connections close after each operation.
+Duplicate event IDs raise `sqlite3.IntegrityError` without replacing existing events.
+Other SQLite errors propagate to the caller.
+
+
+### Audit logger
+
+`AuditLogger(repository)` in `src/secure_agent/audit/logger.py` provides
+`log_tool_call_received(call: ToolCall) -> AuditEvent`. It revalidates the call,
+generates a UUID event ID and UTC timestamp, copies request_id and places task_id/tool in metadata, and saves
+the event through `AuditRepository.add()`. It returns the saved event and propagates
+storage errors. Each invocation creates a separate event; it does not execute tools.
