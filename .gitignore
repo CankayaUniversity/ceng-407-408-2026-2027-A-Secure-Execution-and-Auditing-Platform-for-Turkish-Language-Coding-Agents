@@ -9,3 +9,6 @@ __pycache__/
 # Local configuration and OS metadata
 .env
 .DS_Store
+
+# Local audit database
+/data/

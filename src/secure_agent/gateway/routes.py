@@ -1,6 +1,8 @@
 """HTTP route definitions for the Gateway service."""
 
-from fastapi import APIRouter, HTTPException, status
+import sqlite3
+
+from fastapi import APIRouter, HTTPException, Request, status
 
 from secure_agent.common.schemas import ToolCall
 
@@ -19,13 +21,20 @@ async def health_check() -> dict[str, str]:
     status_code=status.HTTP_501_NOT_IMPLEMENTED,
     tags=["Tools"],
 )
-async def execute_tool(tool_call: ToolCall) -> None:
+def execute_tool(tool_call: ToolCall, request: Request) -> None:
     """Validate the shared ToolCall contract without executing the request.
 
     FastAPI validates the discriminated ToolCall union before invoking this
     handler. Actual execution must remain disabled until authorization,
     permit verification, and sandbox routing are integrated.
     """
+    try:
+        request.app.state.audit_logger.log_tool_call_received(tool_call)
+    except sqlite3.Error as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Audit storage is unavailable.",
+        ) from error
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Tool execution requires the authorization pipeline.",

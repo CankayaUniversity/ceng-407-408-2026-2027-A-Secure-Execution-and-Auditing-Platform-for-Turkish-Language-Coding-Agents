@@ -23,6 +23,8 @@ COPY src/ /app/src/
 RUN useradd --uid 10001 --create-home \
     --shell /usr/sbin/nologin appuser
 
+RUN mkdir -p /app/data && chown appuser:appuser /app/data
+
 USER appuser
 
 # Expose the Gateway HTTP port.

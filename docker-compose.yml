@@ -6,4 +6,9 @@ services:
       dockerfile: docker/gateway.Dockerfile
     ports:
       - "127.0.0.1:8000:8000"
+    volumes:
+      - audit_data:/app/data
     restart: unless-stopped
+
+volumes:
+  audit_data:

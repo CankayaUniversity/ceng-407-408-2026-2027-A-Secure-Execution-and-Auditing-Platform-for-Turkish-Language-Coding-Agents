@@ -78,7 +78,7 @@ Valid example:
 ```json
 {
   "task_id": "task-001",
-  "user_goal": "Giriş kontrolündeki hatayı düzelt.",
+  "user_goal": "GiriÅŸ kontrolÃ¼ndeki hatayÄ± dÃ¼zelt.",
   "workspace_id": "workspace-demo",
   "scope_id": "scope-login-fix"
 }
@@ -342,7 +342,7 @@ scope = TaskScope(
 registry = TaskRegistry(workspace_ids={"workspace-demo"}, scopes=[scope])
 task = Task(
     task_id="task-001",
-    user_goal="Giriş kontrolündeki hatayı düzelt.",
+    user_goal="GiriÅŸ kontrolÃ¼ndeki hatayÄ± dÃ¼zelt.",
     workspace_id="workspace-demo",
     scope_id="scope-login-fix",
 )
@@ -438,7 +438,7 @@ These are Day 1 integration requirements. Their implementation must be checked w
 
 The normal tool-result data contract is `ToolResult`. The actual HTTP response envelope, domain-error status mappings, authentication mechanism, and validation-error body must be agreed with the Gateway owner and documented here when integrated. Do not infer them from Registry exceptions.
 
-The broader plan includes `PolicyDecision`, `GraphAssessment`, and `SupervisorDecision`. They are not defined in the current `schemas.py`. Their owners must agree and implement shared definitions before consumers depend on them. `AuditEvent` is defined in Section 13; SQLite storage is implemented and Gateway integration remains pending.
+The broader plan includes `PolicyDecision`, `GraphAssessment`, and `SupervisorDecision`. They are not defined in the current `schemas.py`. Their owners must agree and implement shared definitions before consumers depend on them. `AuditEvent` is defined in Section 13; SQLite storage and Gateway receipt logging are implemented; tool execution remains disabled.
 
 In an integrated backend, validation and task-context resolution precede policy evaluation. Schema acceptance and registry lookup never grant execution on their own. Authentication, task ownership, policy, supervisor/graph decisions, permit checks, and sandbox controls remain the responsibilities of their respective components.
 
@@ -491,7 +491,7 @@ Multiple events may share a request ID.
 The receipt event records no authorization or execution result. Its metadata contains
 only `task_id` and `tool` from the validated ToolCall, not arguments or file contents.
 Other stages may use other non-blank event names and JSON metadata. Nested metadata
-is mutable despite the frozen model. Gateway integration is pending.
+is mutable despite the frozen model. Gateway records validated requests before returning HTTP 501; tool execution remains disabled.
 
 ### SQLite repository
 
@@ -515,3 +515,18 @@ Other SQLite errors propagate to the caller.
 generates a UUID event ID and UTC timestamp, copies request_id and places task_id/tool in metadata, and saves
 the event through `AuditRepository.add()`. It returns the saved event and propagates
 storage errors. Each invocation creates a separate event; it does not execute tools.
+
+
+### Gateway audit integration
+
+`create_app(database_path)` initializes audit storage during application startup.
+The default database is `data/audit.db`; override it with `AUDIT_DB_PATH`.
+Docker Compose persists `/app/data` in the `audit_data` volume.
+
+- Valid `POST /tools/execute`: record receipt, then return HTTP 501 (execution disabled).
+- Invalid body: HTTP 422; no receipt event is created.
+- SQLite write failure: HTTP 503; no successful tool result is returned.
+
+Query events using `AuditRepository.get_by_request_id()`; no public lookup endpoint
+is exposed. The agent adapter still treats HTTP 501 as an error. The Day 1 flow
+proves request receipt and persistence, not successful tool execution.
