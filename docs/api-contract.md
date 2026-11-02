@@ -542,3 +542,35 @@ Callers must supply trusted policy decisions and reason codes, not raw user text
 ALLOW/DENY/REVIEW describe the policy stage, not final execution authorization.
 Storage errors propagate. The method does not evaluate policy or execute tools;
 Gateway policy integration is a separate step.
+
+
+### Optional Gateway policy evaluation
+
+Trusted startup code may pass `policy_engine` to `create_app()`. Valid requests
+then produce receipt and policy decision audit events. DENY/REVIEW returns HTTP
+403; policy failures are recorded as DENY with `POLICY_EVALUATION_ERROR`.
+ALLOW still returns HTTP 501: no executor, permit verification or authentication
+is enabled by this change. Without a configured policy, receipt-only behavior
+remains unchanged. SQLite failures return HTTP 503 before any execution.
+
+
+### Day 2 isolated demo execution
+
+`create_app(database_path, policy_engine=policy, demo_executor=executor)` enables
+explicit demo execution. A policy is mandatory; DENY/REVIEW never calls the
+executor. ALLOW dispatches the supplied Executor and returns the existing
+ToolResult with `trust_level="untrusted"`. Receipt, decision, and result metadata
+share the request ID. Result output and edit contents are not written to audit.
+SQLite failure before dispatch prevents execution; failure while recording a
+completed result returns 503 but cannot undo a completed operation. Do not retry
+edits automatically.
+
+This mode has no permit enforcement or caller authentication. Only trusted demo
+startup code may supply an executor configured for a disposable workspace inside
+an isolated container. The default `app` has no executor and still returns 501
+for accepted requests. Production execution remains disabled.
+
+`test_agent_gateway_policy_executor_flow` uses a real loopback HTTP server and the
+unchanged SecureToolAdapter. Only the LLM is mocked. A spy observes the real
+Executor, checking allowed reads/edits and zero executor calls on protected-file
+DENY. All files are temporary copies of the sample project.

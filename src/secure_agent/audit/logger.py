@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from secure_agent.audit.repository import AuditRepository
-from secure_agent.common.schemas import AuditEvent, SecurityDecision, ToolCall, parse_tool_call
+from secure_agent.common.schemas import AuditEvent, SecurityDecision, ToolCall, ToolResult, parse_tool_call
 
 
 class AuditLogger:
@@ -43,6 +43,18 @@ class AuditLogger:
                 "decision": decision.decision,
                 "reason_code": decision.reason_code,
             },
+        )
+        self.repository.add(event)
+        return event
+
+    def log_tool_result(self, result: ToolResult) -> AuditEvent:
+        """Persist result metadata without logging untrusted output text."""
+        result = ToolResult.model_validate(result)
+        event = AuditEvent(
+            event_id=str(uuid4()), request_id=result.request_id,
+            event_type="tool_result", timestamp=datetime.now(timezone.utc),
+            metadata={"status": result.status, "source_id": result.source_id,
+                      "trust_level": result.trust_level},
         )
         self.repository.add(event)
         return event
