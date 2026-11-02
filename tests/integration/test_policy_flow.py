@@ -216,12 +216,13 @@ def test_agent_gateway_policy_executor_flow(live_demo_gateway, tool, path, allow
         assert result.request_id == call.request_id
         assert result.status == "success"
         assert result.trust_level == "untrusted"
-        assert [e.event_type for e in events] == [
-            "tool_call_received", "policy_decision", "supervisor_decision",
-            "security_decision", "tool_result",
-        ]
-        assert events[-1].metadata["source_id"] == result.source_id
-        assert "output" not in events[-1].metadata
+        expected_events = ["tool_call_received", "policy_decision", "supervisor_decision",
+                           "security_decision", "tool_result"]
+        if tool == "secure_read_file":
+            expected_events.append("graph_event")
+        assert [e.event_type for e in events] == expected_events
+        assert events[4].metadata["source_id"] == result.source_id
+        assert all("output" not in event.metadata for event in events)
         if tool == "secure_read_file":
             assert result.output == before.decode("utf-8")
         else:
@@ -343,3 +344,72 @@ def test_final_decision_audit_failure_prevents_execution(tmp_path, policy_demo, 
         })
     assert response.status_code == 503
     execute.assert_not_called()
+
+
+
+def test_gateway_readme_graph_survives_restart(tmp_path, policy_demo):
+    from secure_agent.provenance.repository import ProvenanceRepository
+
+    _, policy, executor = policy_demo
+    database = tmp_path / "graph-audit.db"
+    graph_database = tmp_path / "graph-audit-provenance.db"
+    for request_id in ("readme-first", "readme-second"):
+        # Recreate the app to prove graph history is loaded from SQLite.
+        with TestClient(create_app(database, policy_engine=policy,
+                                   supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
+            response = client.post("/tools/execute", json={
+                "request_id": request_id, "task_id": "login-task",
+                "tool": "secure_read_file", "arguments": {"path": "README.md"},
+            })
+        assert response.status_code == 200
+        result = response.json()
+        graph = ProvenanceRepository(graph_database).load_graph()
+        node = f"result:{request_id}"
+        source = f"source:{result['source_id']}"
+        assert graph.nodes[node]["task_id"] == "login-task"
+        assert graph.nodes[source]["path"] == "README.md"
+        assert graph.edges[node, source]["edge_type"] == "DERIVED_FROM"
+        assert all(data["edge_type"] != "EXPOSED_TO_AGENT" for _, _, data in graph.edges(data=True))
+        events = AuditRepository(database).get_by_request_id(request_id)
+        assert events[-1].event_type == "graph_event"
+        assert events[-1].metadata["result_node_id"] == node
+        assert result["output"] not in str(dict(graph.nodes(data=True)))
+    assert graph.number_of_nodes() == 4
+    assert graph.number_of_edges() == 2
+
+
+def test_denied_read_adds_no_graph_nodes(tmp_path, policy_demo):
+    from secure_agent.provenance.repository import ProvenanceRepository
+
+    _, policy, executor = policy_demo
+    database = tmp_path / "denied-audit.db"
+    with TestClient(create_app(database, policy_engine=policy,
+                               supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
+        response = client.post("/tools/execute", json={
+            "request_id": "denied-read", "task_id": "login-task",
+            "tool": "secure_read_file", "arguments": {"path": ".env"},
+        })
+    assert response.status_code == 403
+    graph = ProvenanceRepository(tmp_path / "denied-audit-provenance.db").load_graph()
+    assert graph.number_of_nodes() == 0
+    assert all(e.event_type != "graph_event" for e in AuditRepository(database).get_by_request_id("denied-read"))
+
+
+def test_graph_failure_does_not_return_read_output(tmp_path, policy_demo, monkeypatch):
+    import sqlite3
+    from secure_agent.provenance.repository import ProvenanceRepository
+
+    _, policy, executor = policy_demo
+
+    def fail_save(self, graph):
+        raise sqlite3.OperationalError("Graph write failure")
+
+    monkeypatch.setattr(ProvenanceRepository, "save_graph", fail_save)
+    with TestClient(create_app(tmp_path / "failure.db", policy_engine=policy,
+                               supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
+        response = client.post("/tools/execute", json={
+            "request_id": "graph-failure", "task_id": "login-task",
+            "tool": "secure_read_file", "arguments": {"path": "README.md"},
+        })
+    assert response.status_code == 503
+    assert "output" not in response.json()

@@ -41,6 +41,15 @@ def create_app(
             if policy_engine is not None else None
         )
         app.state.demo_executor = demo_executor
+        app.state.provenance_recorder = None
+        if demo_executor is not None:
+            from secure_agent.provenance.repository import ProvenanceRepository
+            from secure_agent.provenance.recorder import ProvenanceRecorder
+
+            graph_path = path.with_name(path.stem + "-provenance.db")
+            app.state.provenance_recorder = ProvenanceRecorder(
+                ProvenanceRepository(graph_path), app.state.audit_logger,
+            )
         yield
 
     app = FastAPI(

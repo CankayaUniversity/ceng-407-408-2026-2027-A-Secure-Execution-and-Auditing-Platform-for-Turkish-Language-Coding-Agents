@@ -77,3 +77,17 @@ class AuditLogger:
         )
         self.repository.add(event)
         return event
+
+    def log_graph_event(self, call: ToolCall, source_node_id: str,
+                        result_node_id: str) -> AuditEvent:
+        """Record graph identifiers without copying source contents."""
+        call = parse_tool_call(call)
+        event = AuditEvent(
+            event_id=str(uuid4()), request_id=call.request_id,
+            event_type="graph_event", timestamp=datetime.now(timezone.utc),
+            metadata={"task_id": call.task_id, "tool": call.tool,
+                      "source_node_id": source_node_id, "result_node_id": result_node_id,
+                      "edge_type": "DERIVED_FROM"},
+        )
+        self.repository.add(event)
+        return event

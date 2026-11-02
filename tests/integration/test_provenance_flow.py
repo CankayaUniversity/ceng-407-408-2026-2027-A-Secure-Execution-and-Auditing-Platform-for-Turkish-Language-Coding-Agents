@@ -64,7 +64,7 @@ def test_demo_readme_provenance_flow(tmp_path: Path) -> None:
     assert isinstance(read_output, str)
     assert read_output == (
         workspace / "README.md"
-    ).read_text(encoding="utf-8")
+    ).read_bytes().decode("utf-8")
 
     print("EXECUTOR README READ: OK")
 

@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from secure_agent.common.schemas import ToolCall, ToolResult
+from secure_agent.common.schemas import ReadFileToolCall, ToolCall, ToolResult
 
 
 router = APIRouter()
@@ -72,6 +72,10 @@ def execute_tool(tool_call: ToolCall, request: Request) -> ToolResult:
     )
     try:
         logger.log_tool_result(result)
+        if isinstance(tool_call, ReadFileToolCall) and result.status == "success":
+            request.app.state.provenance_recorder.record_read(tool_call, result)
     except sqlite3.Error as error:
         raise HTTPException(status_code=503, detail="Audit storage is unavailable.") from error
+    except (ValueError, TypeError) as error:
+        raise HTTPException(status_code=503, detail="Provenance recording failed.") from error
     return result

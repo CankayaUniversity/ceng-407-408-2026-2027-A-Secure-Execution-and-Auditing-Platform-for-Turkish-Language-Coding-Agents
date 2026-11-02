@@ -620,3 +620,20 @@ Audit event order: `tool_call_received`, `policy_decision`, optional
 `tool_result`. All share request_id. Supervisor metadata stores verdict and
 reason_code; raw LLM-generated reason text is excluded to avoid logging sensitive
 content. Common schemas and SCHEMA_VERSION remain unchanged.
+
+
+### Day 3 Gateway provenance integration
+
+Explicit demo execution initializes `ProvenanceRecorder` using the existing
+Graph Constructor and Repository. Successful secure_read_file results persist
+SOURCE/TOOL_RESULT nodes and DERIVED_FROM before the HTTP response is returned.
+The graph database sits beside audit storage as `<audit-stem>-provenance.db`.
+A graph_event audit record references the nodes with the same request_id/task_id.
+Source content is hashed by the constructor, never copied to graph or audit.
+Denied, failed, and non-read operations do not create read-source nodes.
+
+EXPOSED_TO_AGENT is not recorded merely because a response was prepared; confirmed
+agent delivery needs a separate integration. Snapshot updates use a per-process
+lock; run a single Gateway worker for this prototype. Graph/audit writes are
+separate transactions: failures may leave partial metadata, return 503 and withhold
+read output, rather than claiming a successful fully recorded response.
