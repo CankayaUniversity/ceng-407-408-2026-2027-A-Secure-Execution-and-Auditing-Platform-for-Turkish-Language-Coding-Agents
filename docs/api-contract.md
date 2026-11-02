@@ -78,7 +78,7 @@ Valid example:
 ```json
 {
   "task_id": "task-001",
-  "user_goal": "GiriÅŸ kontrolÃ¼ndeki hatayÄ± dÃ¼zelt.",
+  "user_goal": "GiriÃ…Å¸ kontrolÃƒÂ¼ndeki hatayÃ„Â± dÃƒÂ¼zelt.",
   "workspace_id": "workspace-demo",
   "scope_id": "scope-login-fix"
 }
@@ -342,7 +342,7 @@ scope = TaskScope(
 registry = TaskRegistry(workspace_ids={"workspace-demo"}, scopes=[scope])
 task = Task(
     task_id="task-001",
-    user_goal="GiriÅŸ kontrolÃ¼ndeki hatayÄ± dÃ¼zelt.",
+    user_goal="GiriÃ…Å¸ kontrolÃƒÂ¼ndeki hatayÃ„Â± dÃƒÂ¼zelt.",
     workspace_id="workspace-demo",
     scope_id="scope-login-fix",
 )
@@ -530,3 +530,15 @@ Docker Compose persists `/app/data` in the `audit_data` volume.
 Query events using `AuditRepository.get_by_request_id()`; no public lookup endpoint
 is exposed. The agent adapter still treats HTTP 501 as an error. The Day 1 flow
 proves request receipt and persistence, not successful tool execution.
+
+
+### Policy decision audit
+
+`AuditLogger.log_security_decision(call: ToolCall, decision: SecurityDecision)`
+validates both models and saves a `policy_decision` event. Metadata contains
+`task_id`, `tool`, `arguments`, `decision`, and `reason_code`. Edit `content` is
+excluded; other arguments are the validated path or test profile identifier.
+Callers must supply trusted policy decisions and reason codes, not raw user text.
+ALLOW/DENY/REVIEW describe the policy stage, not final execution authorization.
+Storage errors propagate. The method does not evaluate policy or execute tools;
+Gateway policy integration is a separate step.

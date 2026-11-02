@@ -40,3 +40,43 @@ def test_audit_failure_returns_503_not_success(tmp_path, tool_call):
         response = client.post("/tools/execute", json=tool_call.model_dump(mode="json"))
         assert response.status_code == 503
         assert response.json() == {"detail": "Audit storage is unavailable."}
+
+
+def test_mock_agent_adapter_reaches_gateway_audit(tmp_path):
+    import socket
+    import time
+    from threading import Thread
+
+    import uvicorn
+
+    from agent.tool_adapter import SecureToolAdapter
+
+    path = tmp_path / "audit.db"
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+        server = uvicorn.Server(uvicorn.Config(
+            create_app(path), log_level="error", lifespan="on",
+        ))
+        thread = Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 5
+            while not server.started and thread.is_alive() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert server.started, "Gateway did not start."
+            adapter = SecureToolAdapter(f"http://127.0.0.1:{port}")
+            run = AgentLoop(MockLLM(), task_id="task-demo", adapter=adapter).run("README oku.")
+            assert run.stop_reason == "gateway_error"
+            assert run.error == "Gateway returned HTTP 501."
+            assert run.tool_results == ()
+            assert len(run.tool_calls) == 1
+            call = run.tool_calls[0]
+            events = AuditRepository(path).get_by_request_id(call.request_id)
+            assert len(events) == 1
+            assert events[0].event_type == "tool_call_received"
+            assert events[0].metadata == {"task_id": call.task_id, "tool": call.tool}
+        finally:
+            server.should_exit = True
+            thread.join(timeout=5)
+        assert not thread.is_alive(), "Gateway did not stop."
