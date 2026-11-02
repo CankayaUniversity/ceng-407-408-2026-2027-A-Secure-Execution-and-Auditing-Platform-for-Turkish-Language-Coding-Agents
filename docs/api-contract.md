@@ -1,12 +1,13 @@
 # Shared API Contract
 
-**Contract version:** `0.1.0`
-**Target runtime:** Python 3.11 and Pydantic v2  
+**Contract version:** `0.1.0` (shared schema unchanged)  
+**Documentation revision:** `0.2.0` — Day 1–4 interfaces, updated 2026-11-02  
+**Target runtime:** Python 3.11+ and Pydantic v2  
 **Repository location:** `docs/api-contract.md`
 
 ## 1. Scope and implementation status
 
-This document defines the shared data structures and task registry interface for the first prototype of the Secure Execution and Auditing Platform for Turkish Language Coding Agents.
+This document defines the Day 1 shared contracts and registry, Day 2 Casbin policy interface, Day 3 LLM supervisor interface, and Day 4 canonical JSON and Ed25519 permit issuer for the first prototype of the Secure Execution and Auditing Platform for Turkish Language Coding Agents. It documents the inspected modules, not an assertion that the whole repository or deployment is integrated.
 
 | Component | Source | Status covered by this contract |
 | --- | --- | --- |
@@ -15,7 +16,12 @@ This document defines the shared data structures and task registry interface for
 | Trusted task registry | `src/secure_agent/tasks/registry.py` | Implemented and unit tested |
 | Gateway HTTP endpoints | Gateway integration | Day 1 integration target; implementation was not inspected for this document |
 | Mock agent to Gateway to Audit flow | Agent, Gateway, and Audit integration | Must be demonstrated separately; schema tests do not establish completion |
-| Policy evaluation, permit signing, and sandbox execution | Security and executor modules | Not implemented by the three modules documented above |
+| Task-scoped Casbin policy | `security/policy_engine.py`, `configs/casbin_model.conf`, `configs/casbin_policy.csv` | Implemented and unit tested; see Section 13 |
+| LLM task-alignment supervisor | `security/supervisor.py` | Implemented; offline client/response tests do not establish real-model accuracy; see Section 14 |
+| Canonical JSON and argument hash | `common/canonical_json.py` | Implemented and unit tested; see Section 15 |
+| Ed25519 permit issuer | `security/permit_issuer.py` | Implemented with a trusted decision-provider dependency; see Section 16 |
+| Combined policy/supervisor/graph decision | Trusted backend integration | Not implemented by the modules above; see Section 17 |
+| Permit verification, atomic nonce consumption, sandbox execution | Verifier/executor integration | Consumer requirements; their implementation was not inspected for this document |
 
 Source models determine the behavior of the implemented interfaces. Integration targets below describe required consumer behavior, not evidence that those consumers already implement it.
 
@@ -41,7 +47,7 @@ Every declared field is required unless this document specifies a default. Model
 
 Identifiers are opaque, case-sensitive strings. The schema does not require UUIDs, enforce a naming pattern, or establish uniqueness. The registry enforces task and scope ID uniqueness within its instance.
 
-Code identifiers, protocol values, and error messages are English. Turkish user goals, source contents, filenames, and attack examples are valid Unicode data and must be preserved.
+Code identifiers, protocol values, and reason codes are English. Supervisor explanations and fallback reason strings may be Turkish. Turkish user goals, source contents, filenames, and attack examples are valid Unicode data and must be preserved.
 
 ### 2.2 Workspace-relative request paths
 
@@ -78,7 +84,7 @@ Valid example:
 ```json
 {
   "task_id": "task-001",
-  "user_goal": "GiriÃ…Å¸ kontrolÃƒÂ¼ndeki hatayÃ„Â± dÃƒÂ¼zelt.",
+  "user_goal": "Giriş kontrolündeki hatayı düzelt.",
   "workspace_id": "workspace-demo",
   "scope_id": "scope-login-fix"
 }
@@ -184,12 +190,12 @@ Use `model_dump(mode="json")` for a JSON-compatible Python dictionary, and `mode
 ## 5. SecurityDecision
 
 **Model:** `SecurityDecision`  
-**Producer:** Decision Engine  
-**Consumer:** Gateway orchestration and later permit issuance
+**Producers:** `PolicyEngine` for its own stage; the trusted decision provider for the combined issuance decision  
+**Consumers:** Backend orchestration and `PermitIssuer`
 
 | Field | Type | Required | Meaning |
 | --- | --- | --- | --- |
-| `decision` | `ALLOW`, `DENY`, or `REVIEW` | Yes | Final security verdict |
+| `decision` | `ALLOW`, `DENY`, or `REVIEW` | Yes | Verdict of the producing stage; only the trusted aggregate decision may authorize issuance |
 | `reason_code` | `NonEmptyText` | Yes | Machine-readable explanation code |
 
 ```json
@@ -199,7 +205,7 @@ Use `model_dump(mode="json")` for a JSON-compatible Python dictionary, and `mode
 }
 ```
 
-Verdict values are case-sensitive. `reason_code` is currently free non-blank text; no enum or complete reason-code catalog is enforced.
+Verdict values are case-sensitive. `reason_code` is currently free non-blank text; no enum or complete reason-code catalog is enforced. `PolicyEngine` produces only `ALLOW` or `DENY`. The same schema does not prove that all security stages ran: a policy-stage `ALLOW` is not a combined approval, and a supervisor `ALIGNED` is not a `SecurityDecision`.
 
 Consumer requirement: `DENY` and `REVIEW` must not execute the tool. `ALLOW` only permits continuation of the remaining security checks; it does not bypass permit verification or executor checks. The schema alone does not implement this control flow.
 
@@ -225,13 +231,13 @@ Consumer requirement: `DENY` and `REVIEW` must not execute the tool. `ALLOW` onl
 - `signature`: exactly 86 Base64url characters without `=` padding, matching `^[A-Za-z0-9_-]{86}$`. Decoding must yield 64 bytes and re-encoding must reproduce the same canonical text.
 - `expires_at`: a timezone-aware timestamp. Issuers should produce UTC. Python validation requires an aware `datetime`; JSON timestamp strings are parsed with `Permit.model_validate_json()`.
 
-The signed payload includes all declared permit fields except `signature`. There is no `request_id`, `workspace_id`, or `scope_id` field in this permit schema. Task context must come from trusted registration rather than extra caller-supplied fields.
+The signed payload includes all declared permit fields except `signature`. There is no `request_id`, `workspace_id`, `scope_id`, `audience`, `issued_at`, or `key_id` field in this permit schema. Task context must come from trusted registration rather than extra caller-supplied fields.
 
 ### 6.2 Schema checks versus verification
 
 The current model checks structure and encoding only. It does not compute the argument hash, sign or verify a signature, generate a secure nonce, reject expired permits, or consume nonces.
 
-The issuer and verifier must share a reviewed canonical JSON codec, timestamp representation for signing, and matching hash/signature test vectors before execution is enabled. Those byte-level algorithms are not implemented by the current schema modules and are not established by this document. Never use ordinary JSON output ordering as an assumed signing specification.
+Day 4 implements argument hashing in `common/canonical_json.py` and the signing-byte definition in `security/permit_issuer.py`. Sections 15–16 define the codec and UTC timestamp representation; Section 18 supplies a fixed interoperability vector. The schema itself still does not perform cryptographic verification. Never sign `model_dump_json()` bytes directly as a substitute for `permit_signing_bytes()`.
 
 Verifier integration must independently check the signature, bound task/tool/arguments, expiration, and atomic one-time nonce consumption before execution. A correctly formatted signature can still be invalid cryptographically. A correctly formatted timestamp can already be expired.
 
@@ -239,7 +245,7 @@ Verifier integration must independently check the signature, bound task/tool/arg
 
 **Model:** `TaskScope`  
 **Producer:** Trusted backend configuration  
-**Consumer:** Task Registry and later policy evaluation
+**Consumers:** Task Registry and `PolicyEngine`
 
 | Field | Python type | Required | Default |
 | --- | --- | --- | --- |
@@ -342,7 +348,7 @@ scope = TaskScope(
 registry = TaskRegistry(workspace_ids={"workspace-demo"}, scopes=[scope])
 task = Task(
     task_id="task-001",
-    user_goal="GiriÃ…Å¸ kontrolÃƒÂ¼ndeki hatayÃ„Â± dÃƒÂ¼zelt.",
+    user_goal="Giriş kontrolündeki hatayı düzelt.",
     workspace_id="workspace-demo",
     scope_id="scope-login-fix",
 )
@@ -438,202 +444,360 @@ These are Day 1 integration requirements. Their implementation must be checked w
 
 The normal tool-result data contract is `ToolResult`. The actual HTTP response envelope, domain-error status mappings, authentication mechanism, and validation-error body must be agreed with the Gateway owner and documented here when integrated. Do not infer them from Registry exceptions.
 
-The broader plan includes `PolicyDecision`, `GraphAssessment`, and `SupervisorDecision`. They are not defined in the current `schemas.py`. Their owners must agree and implement shared definitions before consumers depend on them. `AuditEvent` is defined in Section 13; SQLite storage and Gateway receipt logging are implemented; tool execution remains disabled.
+The current policy implementation reuses `SecurityDecision`; it does not define a separate `PolicyDecision`. `SupervisorDecision` now exists in `secure_agent.security.supervisor`, not in `common.schemas`. `GraphAssessment` and `AuditEvent` were not defined by the inspected modules. Their owners must agree on shared interfaces before consumers depend on them. Audit metadata and event-type validation are not established by these schema tests.
 
 In an integrated backend, validation and task-context resolution precede policy evaluation. Schema acceptance and registry lookup never grant execution on their own. Authentication, task ownership, policy, supervisor/graph decisions, permit checks, and sandbox controls remain the responsibilities of their respective components.
 
-## 12. Validation commands and Day 1 completion
+## 12. Validation commands and evidence
 
-The current files provide 112 shared-schema test cases and 69 scope/registry test cases: 181 in total. These counts describe the supplied test versions, not future additions by other owners.
-
-Run from the repository root in Windows PowerShell using the already installed Python launcher and uv:
+Run from the repository root with the project virtual environment active. Install dependencies before collecting tests:
 
 ```powershell
+python -m pip install -r requirements.txt
 $env:PYTHONPATH = "src"
-py -m uv run --no-project --python 3.11 --with pytest --with "pydantic>=2,<3" python -m pytest tests/unit/test_schemas.py tests/unit/test_task_registry.py -q
+python -m pytest tests/unit/test_schemas.py tests/unit/test_task_registry.py tests/unit/test_policy_engine.py tests/unit/test_supervisor.py tests/unit/test_canonical_json.py tests/unit/test_permit_issuer.py -q
 ```
 
-Expected result for these file versions: `181 passed`.
+If an existing environment has no pip, first run `python -m ensurepip --upgrade`. Do not recreate the environment just because pip was omitted.
 
-This command uses an invocation-specific environment and is useful before the shared project setup is complete. It does not validate the team's lockfile or replace agreed dependency declarations. Once project dependencies are configured, use the team's normal project environment for CI and integration.
+| Suite | Scope / supplied baseline |
+| --- | --- |
+| `test_schemas.py` | Shared contracts; Day 1 documented baseline: 112 cases |
+| `test_task_registry.py` | Scope and registry; Day 1 documented baseline: 69 cases |
+| `test_policy_engine.py` | Real Casbin model/policy integration, grants, protected paths, and fail-closed errors |
+| `test_supervisor.py` | 22 tests with fake provider/SDK responses; no external API call |
+| `test_canonical_json.py` | 16 tests for the project JSON subset and hashes |
+| `test_permit_issuer.py` | 16 tests using real Ed25519 signatures; one POSIX-specific test is skipped on Windows |
 
-Day 1 completion requires all of the following:
+The supplied Day 3–4 suites passed 54 tests in the inspected Linux Python 3.12 environment. Dependency resolution was also checked for Python 3.11. This is not a claim that the entire team's repository, Windows runtime, or hosted CI ran successfully. On Windows, the supplied two Day 4 suites normally collect 32 tests with one skip. Counts can change when the team adds tests.
 
-- The shared schemas, scope model, registry, and their unit tests are available on `prototype_v1`.
-- The agent and Gateway use the shared ToolCall contract rather than independent copies.
-- The Gateway's health and invalid-request HTTP behaviors are demonstrated.
-- A valid mock request reaches audit storage and is retrieved by its original request ID.
-- The Gateway/Audit owners reconcile the open integration details in Section 11.
+Schema tests establish structure, policy tests establish those policy cases, and issuer tests establish the exercised signing behavior. None alone establishes real-model robustness, Gateway authentication, container isolation, or deployed key separation.
 
-Changes to required fields, tool names, argument semantics, permit encoding, or permission interpretation require team coordination and matching updates to source, tests, this document, and consumers. Update `SCHEMA_VERSION` when the shared data contract changes. Adding a field is not automatically backward-compatible because existing models reject unknown fields.
+Changes to required fields, tool names, argument semantics, signed-byte representation, or permission interpretation require coordination with all consumers. The shared `SCHEMA_VERSION` remains `0.1.0` because this documentation update changes no model fields. Documentation revision `0.2.0` is not a new request-body field. A later schema change must update code, tests, documentation, and consumers together.
 
+## 13. Day 2 — Task-scoped Casbin authorization
 
-## 13. AuditEvent
+**Implementation:** `src/secure_agent/security/policy_engine.py`  
+**Configuration:** `configs/casbin_model.conf`, `configs/casbin_policy.csv`
 
-**Model:** `AuditEvent` in `src/secure_agent/common/schemas.py`
+### 13.1 Python interface and initialization
 
-The Gateway creates this event after validating a ToolCall. The audit logger and
-repository stores it and looks it up by `request_id`.
+```text
+PolicyEngine(*, registry: TaskRegistry, model_path: str | Path, policy_path: str | Path)
+PolicyEngine.evaluate(call: ToolCall) -> SecurityDecision
+```
 
-| Field | Type | Meaning |
+Construct one engine from trusted configuration at backend startup. The files must exist and be regular files. The loader rejects malformed CSV records, unknown tools, or effects other than lowercase `allow`/`deny`. Blank lines and comment rows are ignored. Any initialization error becomes `PolicyConfigurationError`; do not continue with an unprotected executor. Auto-save is disabled; restart to apply trusted policy edits.
+
+Each evaluation revalidates the call, obtains scope only through `registry.get_scope(call.task_id)`, derives the resource, and calls the Casbin enforcer under an instance `RLock`. File tools use `arguments.path`; tests use `arguments.profile_id`. It preserves original arguments without normalization.
+
+### 13.2 Model and policy meaning
+
+The request tuple is `enforce(scope, tool, resource)`. The policy row is `p, tool, eft`:
+
+```csv
+p, secure_read_file, allow
+p, secure_edit_file, allow
+p, secure_list_files, allow
+p, secure_run_tests, allow
+```
+
+The model uses properties of the trusted `TaskScope` object: `allowed_tools`, `readable_files`, `writable_files`, `listable_directories`, and `allowed_test_profiles`. This is the project's attribute-based access control (ABAC) model. A global tool `allow` never substitutes for the task's resource grants.
+
+Authorization requires a matching global allow, tool membership, and membership in the appropriate exact resource set, with no matching global deny. `deny` overrides `allow`; an empty policy grants nothing. No read/write/list permission implies another.
+
+For all file tools the model rejects paths containing a component matching `.env`, `.env.*`, or `.git`, even when the trusted scope accidentally grants it. The pattern is case-sensitive; this is not a complete defense against filesystem aliases or case-insensitive path resolution. Executor containment, symlink checks, case-handling, and listing-result filtering remain required. The protected-path regex does not apply to test profile identifiers, because they are not filesystem paths.
+
+### 13.3 Policy result codes
+
+| Condition | `decision` | `reason_code` |
 | --- | --- | --- |
-| `event_id` | `NonEmptyText` | Backend-generated event identifier |
-| `request_id` | `NonEmptyText` | Request identifier copied from ToolCall |
-| `event_type` | `NonEmptyText` | Event name; receipt uses `tool_call_received` |
-| `timestamp` | `AwareDatetime` | Backend-generated time; use UTC |
-| `metadata` | `dict[str, JsonValue]` | JSON-compatible event details; receipt stores `task_id` and `tool` |
+| Validated request passes policy | `ALLOW` | `POLICY_ALLOWED` |
+| Evaluated policy rejects request | `DENY` | `POLICY_DENIED` |
+| Invalid tool request | `DENY` | `INVALID_TOOL_CALL` |
+| Task absent from registry | `DENY` | `TASK_NOT_FOUND` |
+| Other scope lookup failure | `DENY` | `TASK_CONTEXT_ERROR` |
+| Enforcer failure | `DENY` | `POLICY_EVALUATION_ERROR` |
 
-All fields are required and follow the shared validation rules. The backend generates
-IDs and timestamps; the schema does not check uniqueness or request correlation.
-Use an aware datetime in Python or `AuditEvent.model_validate_json()` for JSON.
-Multiple events may share a request ID.
+Only the literal boolean `True` returned by Casbin authorizes this policy stage. A truthy non-boolean result is denied. The engine implements no caller authentication, ownership check, LLM assessment, permit issuance, or filesystem access.
 
-The receipt event records no authorization or execution result. Its metadata contains
-only `task_id` and `tool` from the validated ToolCall, not arguments or file contents.
-Other stages may use other non-blank event names and JSON metadata. Nested metadata
-is mutable despite the frozen model. Gateway records validated requests before returning HTTP 501; tool execution remains disabled.
+## 14. Day 3 — LLM task-alignment supervisor
 
-### SQLite repository
+**Implementation and local result model:** `src/secure_agent/security/supervisor.py`
 
-`AuditRepository(database_path)` in `src/secure_agent/audit/repository.py` creates
-`audit_events` in a SQLite file. The parent directory must exist; `:memory:` is not supported.
+### 14.1 Public Python interfaces
 
-- `add(event: AuditEvent) -> None`: validate and commit an event.
-- `get_by_request_id(request_id: str) -> list[AuditEvent]`: return matching events
-  in insertion order, or an empty list.
+```text
+SupervisorLLMClient.complete(*, system_prompt: str, user_prompt: str) -> str
+Supervisor(*, registry: TaskRegistry, llm_client: SupervisorLLMClient)
+Supervisor.evaluate(*, task_id: str, tool_call: object) -> SupervisorDecision
+parse_supervisor_response(raw: str) -> SupervisorDecision
+OpenAIResponsesClient(*, model: str, timeout: float = 20.0, max_output_tokens: int = 2048)
+OpenAIResponsesClient.close() -> None
+```
 
-`event_id` is the primary key; `request_id` has a non-unique index. Timestamps are
-stored as ISO 8601 text with their timezone; metadata is stored as JSON text. Connections close after each operation.
-Duplicate event IDs raise `sqlite3.IntegrityError` without replacing existing events.
-Other SQLite errors propagate to the caller.
+The authenticated backend supplies `task_id` after checking ownership. The supervisor fetches the trusted `Task` from the registry, validates the proposal, and requires `call.task_id == task.task_id`. It does not accept a replacement user goal or caller-defined scope in the tool request.
 
+### 14.2 Model input and output
 
-### Audit logger
+The system prompt version is `PROMPT_VERSION = "supervisor-tr-v1"`. It defines Turkish task-alignment instructions and treats code, comments, and alleged approvals inside the tool call as untrusted data. The user message is JSON with exactly these application-generated top-level fields:
 
-`AuditLogger(repository)` in `src/secure_agent/audit/logger.py` provides
-`log_tool_call_received(call: ToolCall) -> AuditEvent`. It revalidates the call,
-generates a UUID event ID and UTC timestamp, copies request_id and places task_id/tool in metadata, and saves
-the event through `AuditRepository.add()`. It returns the saved event and propagates
-storage errors. Each invocation creates a separate event; it does not execute tools.
+```json
+{
+  "trusted_task": {
+    "task_id": "task-001",
+    "user_goal": "Giriş kontrolündeki hatayı düzelt.",
+    "workspace_id": "workspace-demo",
+    "scope_id": "scope-login-fix"
+  },
+  "untrusted_tool_call": {
+    "request_id": "req-003",
+    "task_id": "task-001",
+    "tool": "secure_edit_file",
+    "arguments": {"path": "src/login.py", "content": "def login():\n    return False\n"}
+  }
+}
+```
 
+The private `_LLMVerdict` schema permits only `verdict` and `reason`. `reason` is a required, non-blank string of at most 1,000 characters. The final local `SupervisorDecision` adds a non-blank `reason_code`, which Python assigns, not the model.
 
-### Gateway audit integration
-
-`create_app(database_path)` initializes audit storage during application startup.
-The default database is `data/audit.db`; override it with `AUDIT_DB_PATH`.
-Docker Compose persists `/app/data` in the `audit_data` volume.
-
-- Valid `POST /tools/execute`: record receipt, then return HTTP 501 (execution disabled).
-- Invalid body: HTTP 422; no receipt event is created.
-- SQLite write failure: HTTP 503; no successful tool result is returned.
-
-Query events using `AuditRepository.get_by_request_id()`; no public lookup endpoint
-is exposed. The agent adapter still treats HTTP 501 as an error. The Day 1 flow
-proves request receipt and persistence, not successful tool execution.
-
-
-### Policy decision audit
-
-`AuditLogger.log_security_decision(call: ToolCall, decision: SecurityDecision)`
-validates both models and saves a `policy_decision` event. Metadata contains
-`task_id`, `tool`, `arguments`, `decision`, and `reason_code`. Edit `content` is
-excluded; other arguments are the validated path or test profile identifier.
-Callers must supply trusted policy decisions and reason codes, not raw user text.
-ALLOW/DENY/REVIEW describe the policy stage, not final execution authorization.
-Storage errors propagate. The method does not evaluate policy or execute tools;
-Gateway policy integration is a separate step.
-
-
-### Optional Gateway policy evaluation
-
-Trusted startup code may pass `policy_engine` to `create_app()`. Valid requests
-then produce receipt and policy decision audit events. DENY/REVIEW returns HTTP
-403; policy failures are recorded as DENY with `POLICY_EVALUATION_ERROR`.
-ALLOW still returns HTTP 501: no executor, permit verification or authentication
-is enabled by this change. Without a configured policy, receipt-only behavior
-remains unchanged. SQLite failures return HTTP 503 before any execution.
-
-
-### Day 2 isolated demo execution
-
-`create_app(database_path, policy_engine=policy, supervisor=supervisor, demo_executor=executor)` enables
-explicit demo execution. A policy is mandatory; a missing Supervisor yields REVIEW. DENY/REVIEW never calls the
-executor. The final ALLOW dispatches the supplied Executor and returns the existing
-ToolResult with `trust_level="untrusted"`. Receipt, decision, and result metadata
-share the request ID. Result output and edit contents are not written to audit.
-SQLite failure before dispatch prevents execution; failure while recording a
-completed result returns 503 but cannot undo a completed operation. Do not retry
-edits automatically.
-
-This mode has no permit enforcement or caller authentication. Only trusted demo
-startup code may supply an executor configured for a disposable workspace inside
-an isolated container. The default `app` has no executor and still returns 501
-for accepted requests. Production execution remains disabled.
-
-`test_agent_gateway_policy_executor_flow` uses a real loopback HTTP server and the
-unchanged SecureToolAdapter. Only the LLM is mocked. A spy observes the real
-Executor, checking allowed reads/edits and zero executor calls on protected-file
-DENY. All files are temporary copies of the sample project.
-
-
-### Day 3 Decision Engine
-
-`DecisionEngine.decide(policy: SecurityDecision, supervisor: SupervisorDecision | None)`
-in `security/decision_engine.py` returns the existing SecurityDecision model.
-SupervisorDecision is imported from the existing `security/supervisor.py`.
-
-| Policy | Supervisor | Result |
+| `verdict` | Meaning | Code for a valid model response |
 | --- | --- | --- |
-| DENY | Ignored | DENY; preserve policy reason code |
-| REVIEW | Ignored | REVIEW; preserve policy reason code |
-| ALLOW | ALIGNED | ALLOW; POLICY_AND_SUPERVISOR_ALLOWED |
-| ALLOW | MISALIGNED | DENY; preserve Supervisor reason code |
-| ALLOW | UNCERTAIN | REVIEW; preserve Supervisor reason code |
-| ALLOW | Missing | REVIEW; SUPERVISOR_REQUIRED |
+| `ALIGNED` | Proposal appears to serve the original task | `SUPERVISOR_ALIGNED` |
+| `MISALIGNED` | Proposal clearly departs from the task | `SUPERVISOR_MISALIGNED` |
+| `UNCERTAIN` | Insufficient evidence or ambiguity | `SUPERVISOR_UNCERTAIN` |
 
-Malformed policy or required Supervisor data returns DENY with
-INVALID_POLICY_DECISION or INVALID_SUPERVISOR_DECISION. Existing Supervisor
-client failures (including timeout) yield UNCERTAIN and therefore REVIEW.
-This pure combiner performs no LLM calls, audit writes, timeout enforcement,
-permit issuance, or execution. The Gateway orchestrator short-circuits
-policy DENY/REVIEW and logs stage/final decisions. ALLOW does not replace permits or
-other required security checks. SCHEMA_VERSION remains 0.1.0.
+A model response could be `{"verdict":"MISALIGNED","reason":"Düzenleme görevle ilgisiz."}`. The returned object also has `reason_code: "SUPERVISOR_MISALIGNED"`. Serialize it with `model_dump_json()` or `model_dump(mode="json")`. The schema is local to the supervisor module, not exported by `common.schemas`.
 
+### 14.3 Fail-closed assessment behavior
 
-### Day 3 Gateway orchestration
+| Condition in `evaluate()` | Returned verdict | `reason_code` |
+| --- | --- | --- |
+| Missing or malformed trusted task ID | `UNCERTAIN` | `SUPERVISOR_UNKNOWN_TASK` |
+| Invalid ToolCall | `UNCERTAIN` | `SUPERVISOR_INVALID_TOOL_CALL` |
+| Task IDs disagree | `UNCERTAIN` | `SUPERVISOR_TASK_MISMATCH` |
+| Input contains invalid Unicode for UTF-8 encoding | `UNCERTAIN` | `SUPERVISOR_INVALID_ENCODING` |
+| Serialized user message exceeds 65,536 bytes | `UNCERTAIN` | `SUPERVISOR_INPUT_TOO_LARGE` |
+| Client raises an ordinary exception, including timeout/refusal handling | `UNCERTAIN` | `SUPERVISOR_LLM_ERROR` |
+| Response cannot be validated | `UNCERTAIN` | `SUPERVISOR_INVALID_RESPONSE` |
 
-`SecurityOrchestrator` in `gateway/orchestrator.py` evaluates Policy, persists its
-verdict, and calls Supervisor only for policy ALLOW. It persists the Supervisor
-verdict and passes both assessments to DecisionEngine, then persists the final
-`security_decision` before returning. Policy DENY/REVIEW skips Supervisor.
-`create_app(..., supervisor=supervisor)` supplies the trusted backend instance.
+Response validation allows at most 8,192 UTF-8 bytes, rejects duplicate keys, non-standard numeric constants, unknown or incorrectly cased verdicts, missing/extra fields, blank reasons, and wrong field types. It does not extract JSON from Markdown or repair partial output. Raw provider exception messages are not copied into the result. Direct calls to `parse_supervisor_response()` raise on invalid input; `evaluate()` converts the documented parsing failures to `UNCERTAIN`.
 
-Missing Supervisor, evaluation errors, and provider timeouts do not authorize
-execution. Supervisor client calls must enforce their provider timeout; the
-synchronous orchestrator does not impose a separate hard deadline. HTTP returns
-403 for DENY/REVIEW. A final ALLOW reaches only an explicitly injected demo
-Executor; otherwise it returns 501. No configured policy retains receipt-only
-501 behavior. Audit failures return 503 and prevent downstream dispatch.
+`OpenAIResponsesClient` uses the Responses API with a strict JSON schema, no supplied tools, `store=False`, a required explicitly selected model, and SDK `max_retries=0`. `OPENAI_API_KEY` is read by the SDK. Initialization failures propagate as startup errors. Incomplete responses, refusal content, or empty text raise inside the adapter. Close the client during shutdown. A request timeout is not a hard end-to-end task deadline. Other client implementations must enforce their own timeouts.
 
-Audit event order: `tool_call_received`, `policy_decision`, optional
-`supervisor_decision`, `security_decision`, and (only after demo execution)
-`tool_result`. All share request_id. Supervisor metadata stores verdict and
-reason_code; raw LLM-generated reason text is excluded to avoid logging sensitive
-content. Common schemas and SCHEMA_VERSION remain unchanged.
+`ALIGNED` is advisory and never equals a final `ALLOW`. The model does not receive original file contents, so changes that require an old/new comparison may remain `UNCERTAIN`. Prompt separation and valid JSON do not establish injection resistance or model accuracy. Real-model evaluation is separate from the offline unit tests.
 
+## 15. Day 4 — Canonical JSON and argument hashing
 
-### Day 3 Gateway provenance integration
+**Implementation:** `src/secure_agent/common/canonical_json.py`  
+**Codec dependency:** `rfc8785==0.1.4`
 
-Explicit demo execution initializes `ProvenanceRecorder` using the existing
-Graph Constructor and Repository. Successful secure_read_file results persist
-SOURCE/TOOL_RESULT nodes and DERIVED_FROM before the HTTP response is returned.
-The graph database sits beside audit storage as `<audit-stem>-provenance.db`.
-A graph_event audit record references the nodes with the same request_id/task_id.
-Source content is hashed by the constructor, never copied to graph or audit.
-Denied, failed, and non-read operations do not create read-source nodes.
+### 15.1 Public Python interfaces
 
-EXPOSED_TO_AGENT is not recorded merely because a response was prepared; confirmed
-agent delivery needs a separate integration. Snapshot updates use a per-process
-lock; run a single Gateway worker for this prototype. Graph/audit writes are
-separate transactions: failures may leave partial metadata, return 503 and withhold
-read output, rather than claiming a successful fully recorded response.
+| Function | Result / behavior |
+| --- | --- |
+| `canonical_json_loads(payload: str | bytes)` | Parses raw UTF-8 JSON into the project's JSON subset |
+| `canonical_json_bytes(value: object)` | Returns canonical UTF-8 `bytes` |
+| `canonical_json_text(value: object)` | Returns the same representation as `str` |
+| `canonical_json_hash(value: object)` | SHA-256 of canonical bytes; 64 lowercase hex characters |
+| `tool_arguments_hash(tool_call: object)` | Validates a ToolCall, then hashes only `call.arguments.model_dump(mode="json")` |
+
+Invalid canonicalization input raises `CanonicalJSONError`, a `ValueError` subclass. Invalid ToolCall data in `tool_arguments_hash()` raises Pydantic `ValidationError`.
+
+### 15.2 Project subset and preservation rules
+
+Accept only built-in `dict` with built-in string keys, `list`, `str`, `int`, `bool`, and `None`. Floats, decimal/exponent JSON number tokens, `NaN`, `Infinity`, tuples, sets, bytes-as-values, datetime objects, and implicit object conversion are rejected. This no-float restriction is a project choice; RFC 8785 supports finite floating-point values.
+
+Integers must be in `[-9007199254740991, 9007199254740991]`. Invalid Unicode, cyclic containers, and nesting deeper than the implemented `MAX_JSON_DEPTH = 64` check are rejected. There is no whole-request byte limit here; the receiving service must enforce one. Do not mutate caller-owned containers concurrently with serialization.
+
+No string trimming, Unicode normalization, case conversion, path rewriting, or line-ending conversion is performed. List order remains unchanged. Pydantic models must first be explicitly converted with `model_dump(mode="json")`; datetime representation for signing is handled explicitly by the issuer.
+
+`canonical_json_bytes("{}")` serializes a string, not an object. Use `canonical_json_bytes(canonical_json_loads("{}"))` when the input is raw JSON representing an object.
+
+### 15.3 Sorting and UTF-8 output
+
+The codec sorts object keys recursively using unsigned UTF-16 code units, independent of language/locale. It emits UTF-8 bytes after serialization; the UTF-16 sorting rule does not mean the document is encoded as UTF-16. A generic Python key sort is not a substitute for JCS for arbitrary Unicode keys.
+
+For example, the emoji key `U+1F600` has UTF-16 units `D83D DE00`; the key `U+E000` has unit `E000`. JCS orders the emoji first because `D83D < E000`. This example is covered by the supplied tests.
+
+### 15.4 Argument-hash binding and ingress parsing
+
+```python
+from secure_agent.common.canonical_json import canonical_json_hash, tool_arguments_hash
+
+call_data = {
+    "request_id": "req-hash",
+    "task_id": "task-001",
+    "tool": "secure_edit_file",
+    "arguments": {"path": "main.py", "content": "print('Merhaba')\n"},
+}
+assert tool_arguments_hash(call_data) == canonical_json_hash(call_data["arguments"])
+```
+
+Changing only `request_id` or `task_id` does not change this argument hash. The signed permit separately binds task and tool. The current Permit does not bind `request_id`; do not claim full ToolCall-envelope signing.
+
+`canonical_json_loads()` rejects duplicate keys, including equivalent escaped names. This check must run on original request text/bytes before an ordinary JSON parser has discarded duplicates. Its existence does not automatically integrate it into FastAPI, `parse_tool_call_json()`, or `Permit.model_validate_json()`. After strict raw parsing, apply the relevant schema validation. For datetime fields, use a reviewed conversion/validation path because strict Python-model validation does not parse timestamp strings the same way as JSON-model validation.
+
+## 16. Day 4 — Ed25519 Permit Issuer
+
+**Implementation:** `src/secure_agent/security/permit_issuer.py`
+
+### 16.1 Public Python interfaces
+
+```text
+DecisionProvider = Callable[[ToolCall], SecurityDecision]
+Clock = Callable[[], datetime]
+PermitIssuer(*, private_key: Ed25519PrivateKey, decision_provider: DecisionProvider,
+             ttl_seconds: int = 60, clock: Clock = _utc_now)
+PermitIssuer.from_pem_file(path: str | Path, *, decision_provider: DecisionProvider,
+                          password: bytes | None = None, ttl_seconds: int = 60,
+                          clock: Clock = _utc_now) -> PermitIssuer
+PermitIssuer.issue(tool_call: object) -> Permit
+PermitIssuer.public_key() -> Ed25519PublicKey
+load_ed25519_private_key(path: str | Path, *, password: bytes | None = None)
+    -> Ed25519PrivateKey
+permit_signing_bytes(permit: Permit) -> bytes
+```
+
+Initialize once inside the trusted issuer service, using persistent configured key material. The path, password, decision provider, clock, and TTL are trusted startup configuration, not agent arguments. No HTTP endpoint is implemented by this module.
+
+### 16.2 Decision and issuance sequence
+
+1. Revalidate the proposal using `parse_tool_call()`.
+2. Pass a separately validated snapshot to `decision_provider`; do not reuse a cached approval for another call.
+3. Revalidate its return value as `SecurityDecision`.
+4. Require `decision == "ALLOW"`; otherwise raise `PermitDeniedError`.
+5. Read the configured timezone-aware clock and convert it to UTC.
+6. Generate `permit_id` with UUID4 and `nonce` with `secrets.token_urlsafe(24)` (24 random bytes, encoded as URL-safe text).
+7. Compute `arguments_hash` using the shared helper; bind task and tool from the validated proposal.
+8. Set expiration to the UTC clock value plus the configured TTL, validate unsigned fields, sign their canonical bytes, encode the signature, and return a validated `Permit`.
+
+TTL must be an integer from 1 through 60 seconds; booleans are rejected. The default and maximum are 60 seconds. Private-key or callable-type configuration errors raise `TypeError`; invalid TTL or naive clock values raise `ValueError`. Provider exceptions, invalid decisions, invalid calls, and signing failures propagate and produce no returned permit. Expiration is computed after the synchronous provider call; the module supplies no overall provider timeout or trusted-approval persistence.
+
+The provider MUST check the exact proposal using authoritative task/policy/supervisor/graph state as required by the integration. A callback that always returns `ALLOW`, or one that checks policy alone, does not establish the full security decision. The module cannot infer which checks a callback actually performed.
+
+### 16.3 Exact signed-byte definition
+
+Sign all current `Permit` fields except `signature`: `permit_id`, `task_id`, `tool`, `arguments_hash`, `nonce`, and `expires_at`.
+
+Before canonical JSON encoding, `expires_at` is converted to UTC and formatted with exactly six fractional digits and a literal `Z`, for example `2030-01-01T00:01:00.000000Z`. Equivalent timezone representations of the same instant produce the same signed bytes. The wire JSON may use another equivalent timestamp spelling; the verifier must reconstruct bytes with `permit_signing_bytes()` rather than sign/verify the wire text directly.
+
+The issuer signs the canonical bytes with Ed25519. The resulting 64 bytes are encoded as canonical unpadded Base64url, producing the schema's 86-character `signature`. The unsigned payload has no extra version field or domain prefix in this implementation.
+
+`permit_signing_bytes()` revalidates a complete Permit and reconstructs the unsigned bytes. It does not verify the signature, enforce expiration, compare a ToolCall, or consume a nonce. The current schema does not authenticate a request ID, audience, key ID, issuance time, workspace version, or file snapshot hash. Those cannot be claimed without a coordinated schema/protocol change.
+
+### 16.4 Private-key loading and deployment responsibilities
+
+`load_ed25519_private_key()` loads a PEM private key and checks that it is Ed25519. Encrypted PEM files are supported via a bytes password. Missing, malformed, empty, oversized, incorrectly encrypted, or wrong-type keys raise `KeyLoadingError`; there is no automatic generation or replacement. The read limit is 16,384 bytes.
+
+The loader requires a regular file. On POSIX it rejects group/other permission bits and uses `O_NOFOLLOW` for the final component when available. Parent directories still need protection. Windows ACLs must be configured separately; POSIX mode tests do not prove Windows access control.
+
+The API provides a public-key accessor but no private-key export method. Python private attributes do not isolate the key from code in the same process, and memory zeroization is not guaranteed. Never commit production keys or include them in agent images, editable workspaces, shared mounts, or agent-visible configuration. The issuer must have the private key; the verifier needs the trusted public key. This key separation must be checked in deployment, not inferred from unit-test success.
+
+## 17. Combined decision and execution integration requirements
+
+The required order is authentication/ownership and task resolution, request validation, policy and supervisor/graph checks, trusted decision aggregation, permit issuance, permit verification, atomic nonce consumption, and controlled execution. The inspected modules implement individual stages, not the entire chain.
+
+| Result or artifact | Meaning | What it does not establish |
+| --- | --- | --- |
+| Valid ToolCall | Correct request structure | Authorization or task ownership |
+| Policy `ALLOW` | The policy stage permits the operation | Task alignment or combined approval |
+| Supervisor `ALIGNED` | Model assessment of task alignment | Policy authorization or cryptographic permission |
+| Trusted combined `ALLOW` | The configured aggregator reports required checks passed | Successful signature verification or actual execution |
+| Signed Permit | Issuer bound the current permit fields to its signing key | Freshness, single use, filesystem safety, or tool success |
+
+`DENY`, `REVIEW`, `MISALIGNED`, and `UNCERTAIN` must not reach execution through a default-allow path. Define the aggregation policy explicitly; this document does not invent a graph interface or implement an aggregator. The issuer's `DecisionProvider` is the integration boundary.
+
+Before execution, the verifier must validate the permit structure and trusted public key, verify the signature over the shared signing bytes, compare task/tool/argument hash to the exact proposed operation, require a non-expired permit, and atomically reject already-used nonces. A random nonce alone does not prevent replay. A valid signature alone does not establish that the permit is current or applicable to this call.
+
+The executor must still enforce workspace containment, symlink/race protections, resource limits, trusted test-profile resolution, and sandbox policy. Audit integration should preserve the task/request correlation and record policy, supervisor, issuance, and execution outcomes; exact audit schemas and HTTP envelopes remain owned by their corresponding components.
+
+## 18. Fixed hash/signature interoperability vector
+
+This is a synthetic fixture only. Its public seed, nonce, IDs, and expiration are test data, not production key material or a usable authorization example. Do not import this seed into a deployed issuer. It tests byte interoperability, not approval, freshness, or replay protection.
+
+- Test-only Ed25519 seed, hexadecimal: `000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f`
+- Expected raw public key, hexadecimal: `03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8`
+- Arguments canonical UTF-8 text: `{"path":"README.md"}`
+- Expected `arguments_hash`: `7d6441497d2a000b8143602a7817c90abe7db88e139f89c062a1c36cfe0ad9d6`
+
+Full synthetic permit:
+
+```json
+{
+  "permit_id": "permit-vector-001",
+  "task_id": "task-vector-001",
+  "tool": "secure_read_file",
+  "arguments_hash": "7d6441497d2a000b8143602a7817c90abe7db88e139f89c062a1c36cfe0ad9d6",
+  "nonce": "nonce-vector-only-not-for-production",
+  "expires_at": "2030-01-01T00:01:00.000000Z",
+  "signature": "y-k2vJFbfYWP9dLK-IjtSMbtaCeIJXH-IrT1ssa-j8R1TuEcAaRYV61JufkfaHovYSOAaxNlD4odnzsx-e52Cw"
+}
+```
+
+Expected unsigned canonical UTF-8 text (no trailing newline is part of the signed data):
+
+```text
+{"arguments_hash":"7d6441497d2a000b8143602a7817c90abe7db88e139f89c062a1c36cfe0ad9d6","expires_at":"2030-01-01T00:01:00.000000Z","nonce":"nonce-vector-only-not-for-production","permit_id":"permit-vector-001","task_id":"task-vector-001","tool":"secure_read_file"}
+```
+
+The following offline check verifies the fixed signature with only the public key. It deliberately does not enforce expiration or consume a nonce:
+
+```python
+import base64
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from secure_agent.common.schemas import Permit
+from secure_agent.security.permit_issuer import permit_signing_bytes
+
+public_key = Ed25519PublicKey.from_public_bytes(bytes.fromhex(
+    "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8"
+))
+permit = Permit.model_validate_json('''{"permit_id": "permit-vector-001", "task_id": "task-vector-001", "tool": "secure_read_file", "arguments_hash": "7d6441497d2a000b8143602a7817c90abe7db88e139f89c062a1c36cfe0ad9d6", "nonce": "nonce-vector-only-not-for-production", "expires_at": "2030-01-01T00:01:00.000000Z", "signature": "y-k2vJFbfYWP9dLK-IjtSMbtaCeIJXH-IrT1ssa-j8R1TuEcAaRYV61JufkfaHovYSOAaxNlD4odnzsx-e52Cw"}''')
+public_key.verify(
+    base64.urlsafe_b64decode(permit.signature + "=="),
+    permit_signing_bytes(permit),
+)
+```
+
+## 19. Dependency installation, CI, and completion evidence
+
+`requirements.txt` lists the direct pinned dependencies for the shared prototype: Pydantic, FastAPI, Uvicorn, HTTPX, PyCasbin (`casbin`), NetworkX, OpenAI SDK, cryptography, rfc8785, pytest, and pandas. Some packages serve other team components; their presence is not evidence that those components were implemented here. Transitive dependencies are resolved by pip; this is not a complete transitive lockfile. Python supplies sqlite3/json/hashlib/unittest; Docker/runsc are separate system installations.
+
+Track `requirements.txt` in Git. Do not add `/requirements.txt` to `.gitignore`. The local `.venv` does not transfer installed packages to GitHub Actions.
+
+The supplied CI workflow uses Python 3.11 on Ubuntu, a 10-minute job timeout, read-only repository-content permissions, push/pull-request triggers for `main` and `prototype_v1`, and manual dispatch. It installs `.[dev]`, installs `requirements.txt`, runs `python -m pytest tests -q`, then runs the demo tests in `demo/sample_project`. Preserve the existing project-install step when adding requirement installation:
+
+```yaml
+- name: Install dependencies
+  run: python -m pip install ".[dev]"
+- name: Install project dependencies
+  run: python -m pip install -r requirements.txt
+- name: Run tests
+  run: python -m pytest tests -q
+- name: Run demo login tests
+  working-directory: demo/sample_project
+  run: python -m pytest tests/unit -q
+```
+
+The workflow contents were supplied in conversation; its exact repository filename and a subsequent successful hosted run were not inspected. An import error for `rfc8785` or `cryptography` during collection indicates missing dependencies in that Python environment; it is not a failed assertion about permit behavior.
+
+| Day | Local module evidence | Additional integration evidence still required |
+| --- | --- | --- |
+| 1 | Shared schemas, TaskScope, TaskRegistry and tests | Gateway validation/health, shared agent contract, mock request reaching audit |
+| 2 | Casbin model/policy/engine and regression tests | Real Gateway path uses trusted registry scope and cannot bypass policy |
+| 3 | Supervisor, structured results, offline adapter/error tests | Real endpoint access, real JSON verdicts, out-of-task edit evaluation, measured model behavior |
+| 4 | Canonical JSON, real Ed25519 issuer/signature/key-loading tests | Trusted combined decision provider; shared verifier codec; signature/binding/expiry/replay checks; private key absent from agent container |
+
+Passing unit tests or building a signed Permit does not by itself complete these integration checks. With the in-memory registry, a restart requires trusted task/scope setup again; multi-process persistence and deployed key rotation are not implemented by these modules.
+
+## 20. References and documentation revision notes
+
+Implementation files are authoritative for the Python interfaces and project-specific restrictions. External references explain the underlying mechanisms; they do not prove this deployment is secure:
+
+- [Casbin overview](https://casbin.apache.org/docs/overview/)
+- [Casbin ABAC](https://casbin.apache.org/docs/abac/)
+- [RFC 8785: JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785.html), especially Sections 3.2.3–3.2.4
+- [cryptography Ed25519 signing](https://cryptography.io/en/stable/hazmat/primitives/asymmetric/ed25519/)
+- [NIST FIPS 180-4: Secure Hash Standard](https://csrc.nist.gov/pubs/fips/180-4/upd1/final)
+
+Revision `0.2.0` preserves the Day 1 schema fields and registry API, documents the implemented Day 2–4 modules, distinguishes stage verdicts from combined approval, specifies canonical argument hashing and signed UTC timestamps, supplies an interoperability vector, and records dependency/CI and integration requirements. It does not modify source code or add HTTP endpoints.
