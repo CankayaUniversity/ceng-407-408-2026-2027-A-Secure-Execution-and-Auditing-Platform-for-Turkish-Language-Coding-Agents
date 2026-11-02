@@ -12,6 +12,8 @@ from fastapi import FastAPI
 from secure_agent.audit.logger import AuditLogger
 from secure_agent.audit.repository import AuditRepository
 from secure_agent.gateway.routes import router
+from secure_agent.gateway.orchestrator import SecurityOrchestrator
+from secure_agent.security.supervisor import Supervisor
 
 
 if TYPE_CHECKING:
@@ -23,6 +25,7 @@ def create_app(
     database_path: str | Path | None = None, *,
     policy_engine: PolicyEngine | None = None,
     demo_executor: Executor | None = None,
+    supervisor: Supervisor | None = None,
 ) -> FastAPI:
     """Create a Gateway with file-backed audit storage."""
     if demo_executor is not None and policy_engine is None:
@@ -33,7 +36,10 @@ def create_app(
     async def lifespan(app: FastAPI):
         path.parent.mkdir(parents=True, exist_ok=True)
         app.state.audit_logger = AuditLogger(AuditRepository(path))
-        app.state.policy_engine = policy_engine
+        app.state.orchestrator = (
+            SecurityOrchestrator(policy_engine, supervisor, app.state.audit_logger)
+            if policy_engine is not None else None
+        )
         app.state.demo_executor = demo_executor
         yield
 

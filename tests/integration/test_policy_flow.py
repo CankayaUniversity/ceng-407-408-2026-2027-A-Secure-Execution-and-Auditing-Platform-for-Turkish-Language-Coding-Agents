@@ -17,6 +17,13 @@ from secure_agent.gateway.main import create_app
 from secure_agent.security.policy_engine import PolicyEngine
 from secure_agent.tasks.registry import TaskRegistry
 from secure_agent.tasks.scope import TaskScope
+from secure_agent.security.supervisor import SupervisorDecision
+
+
+class AlignedSupervisor:
+    def evaluate(self, **kwargs):
+        return SupervisorDecision(verdict="ALIGNED", reason="Test assessment.",
+                                  reason_code="SUPERVISOR_ALIGNED")
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -107,14 +114,17 @@ def test_gateway_records_real_policy_verdict(tmp_path, policy_demo, path, expect
     workspace, policy, _ = policy_demo
     database = tmp_path / "gateway-audit.db"
     before = (workspace / path).read_bytes()
-    with TestClient(create_app(database, policy_engine=policy)) as client:
+    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor())) as client:
         response = client.post("/tools/execute", json={
             "request_id": "gateway-policy", "task_id": "login-task",
             "tool": "secure_read_file", "arguments": {"path": path},
         })
     assert response.status_code == status_code
     events = AuditRepository(database).get_by_request_id("gateway-policy")
-    assert [e.event_type for e in events] == ["tool_call_received", "policy_decision"]
+    expected_events = ["tool_call_received", "policy_decision"]
+    if expected == "ALLOW":
+        expected_events.append("supervisor_decision")
+    assert [e.event_type for e in events] == expected_events + ["security_decision"]
     assert events[1].metadata["decision"] == expected
     assert events[1].metadata["reason_code"] == f"POLICY_{'ALLOWED' if expected == 'ALLOW' else 'DENIED'}"
     assert (workspace / path).read_bytes() == before
@@ -128,7 +138,7 @@ def test_gateway_policy_error_is_denied_and_audited(tmp_path, monkeypatch, polic
 
     monkeypatch.setattr(policy, "evaluate", fail)
     database = tmp_path / "failed-policy.db"
-    with TestClient(create_app(database, policy_engine=policy)) as client:
+    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor())) as client:
         response = client.post("/tools/execute", json={
             "request_id": "policy-error", "task_id": "login-task",
             "tool": "secure_read_file", "arguments": {"path": "src/login.py"},
@@ -152,7 +162,7 @@ def live_demo_gateway(tmp_path, policy_demo, monkeypatch):
     execute = Mock(wraps=executor.execute)
     monkeypatch.setattr(executor, "execute", execute)
     database = tmp_path / "live-demo.db"
-    app = create_app(database, policy_engine=policy, demo_executor=executor)
+    app = create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(), demo_executor=executor)
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -207,7 +217,8 @@ def test_agent_gateway_policy_executor_flow(live_demo_gateway, tool, path, allow
         assert result.status == "success"
         assert result.trust_level == "untrusted"
         assert [e.event_type for e in events] == [
-            "tool_call_received", "policy_decision", "tool_result",
+            "tool_call_received", "policy_decision", "supervisor_decision",
+            "security_decision", "tool_result",
         ]
         assert events[-1].metadata["source_id"] == result.source_id
         assert "output" not in events[-1].metadata
@@ -220,7 +231,7 @@ def test_agent_gateway_policy_executor_flow(live_demo_gateway, tool, path, allow
         assert run.stop_reason == "gateway_error"
         assert run.error == "Gateway returned HTTP 403."
         assert run.tool_results == ()
-        assert len(events) == 2
+        assert len(events) == 3
         assert (workspace / path).read_bytes() == before
 
 
@@ -238,7 +249,7 @@ def test_audit_failure_prevents_demo_execution(tmp_path, policy_demo, monkeypatc
     execute = Mock(wraps=executor.execute)
     monkeypatch.setattr(executor, "execute", execute)
     database = tmp_path / "audit-failure.db"
-    with TestClient(create_app(database, policy_engine=policy, demo_executor=executor)) as client:
+    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
         with sqlite3.connect(database) as connection:
             connection.execute("DROP TABLE audit_events")
         response = client.post("/tools/execute", json={
@@ -258,7 +269,7 @@ def test_demo_list_and_fixed_test_profile(tmp_path, policy_demo, tool, arguments
 
     _, policy, executor = policy_demo
     database = tmp_path / "other-tools.db"
-    with TestClient(create_app(database, policy_engine=policy, demo_executor=executor)) as client:
+    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
         response = client.post("/tools/execute", json={
             "request_id": tool, "task_id": "login-task", "tool": tool,
             "arguments": arguments,
@@ -272,3 +283,63 @@ def test_demo_list_and_fixed_test_profile(tmp_path, policy_demo, tool, arguments
     else:
         assert "8 passed" in result["output"]
     assert AuditRepository(database).get_by_request_id(tool)[-1].metadata["status"] == "success"
+
+
+@pytest.mark.parametrize("assessment", ["MISALIGNED", "UNCERTAIN", "missing", "timeout"])
+def test_gateway_supervisor_cannot_authorize_uncertain_work(
+    tmp_path, policy_demo, monkeypatch, assessment,
+):
+    from unittest.mock import Mock
+
+    workspace, policy, executor = policy_demo
+    execute = Mock(wraps=executor.execute)
+    monkeypatch.setattr(executor, "execute", execute)
+    supervisor = Mock()
+    if assessment == "timeout":
+        supervisor.evaluate.side_effect = TimeoutError("Private provider details")
+    elif assessment != "missing":
+        supervisor.evaluate.return_value = SupervisorDecision(
+            verdict=assessment, reason="Example assessment.",
+            reason_code=f"SUPERVISOR_{assessment}",
+        )
+    database = tmp_path / "supervisor-audit.db"
+    before = (workspace / "src/login.py").read_bytes()
+    with TestClient(create_app(database, policy_engine=policy, demo_executor=executor,
+                               supervisor=None if assessment == "missing" else supervisor)) as client:
+        response = client.post("/tools/execute", json={
+            "request_id": "supervisor-check", "task_id": "login-task",
+            "tool": "secure_edit_file", "arguments": {"path": "src/login.py", "content": "bad edit"},
+        })
+    assert response.status_code == 403
+    execute.assert_not_called()
+    assert (workspace / "src/login.py").read_bytes() == before
+    events = AuditRepository(database).get_by_request_id("supervisor-check")
+    assert [e.event_type for e in events] == [
+        "tool_call_received", "policy_decision", "supervisor_decision", "security_decision",
+    ]
+    assert events[-1].metadata["decision"] == ("DENY" if assessment == "MISALIGNED" else "REVIEW")
+
+
+def test_final_decision_audit_failure_prevents_execution(tmp_path, policy_demo, monkeypatch):
+    import sqlite3
+    from unittest.mock import Mock
+
+    _, policy, executor = policy_demo
+    execute = Mock(wraps=executor.execute)
+    monkeypatch.setattr(executor, "execute", execute)
+    original_add = AuditRepository.add
+
+    def fail_final(self, event):
+        if event.event_type == "security_decision":
+            raise sqlite3.OperationalError("Audit write failed")
+        return original_add(self, event)
+
+    monkeypatch.setattr(AuditRepository, "add", fail_final)
+    with TestClient(create_app(tmp_path / "final-audit.db", policy_engine=policy,
+                               supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
+        response = client.post("/tools/execute", json={
+            "request_id": "final-audit-failure", "task_id": "login-task",
+            "tool": "secure_read_file", "arguments": {"path": "src/login.py"},
+        })
+    assert response.status_code == 503
+    execute.assert_not_called()

@@ -556,9 +556,9 @@ remains unchanged. SQLite failures return HTTP 503 before any execution.
 
 ### Day 2 isolated demo execution
 
-`create_app(database_path, policy_engine=policy, demo_executor=executor)` enables
-explicit demo execution. A policy is mandatory; DENY/REVIEW never calls the
-executor. ALLOW dispatches the supplied Executor and returns the existing
+`create_app(database_path, policy_engine=policy, supervisor=supervisor, demo_executor=executor)` enables
+explicit demo execution. A policy is mandatory; a missing Supervisor yields REVIEW. DENY/REVIEW never calls the
+executor. The final ALLOW dispatches the supplied Executor and returns the existing
 ToolResult with `trust_level="untrusted"`. Receipt, decision, and result metadata
 share the request ID. Result output and edit contents are not written to audit.
 SQLite failure before dispatch prevents execution; failure while recording a
@@ -574,3 +574,49 @@ for accepted requests. Production execution remains disabled.
 unchanged SecureToolAdapter. Only the LLM is mocked. A spy observes the real
 Executor, checking allowed reads/edits and zero executor calls on protected-file
 DENY. All files are temporary copies of the sample project.
+
+
+### Day 3 Decision Engine
+
+`DecisionEngine.decide(policy: SecurityDecision, supervisor: SupervisorDecision | None)`
+in `security/decision_engine.py` returns the existing SecurityDecision model.
+SupervisorDecision is imported from the existing `security/supervisor.py`.
+
+| Policy | Supervisor | Result |
+| --- | --- | --- |
+| DENY | Ignored | DENY; preserve policy reason code |
+| REVIEW | Ignored | REVIEW; preserve policy reason code |
+| ALLOW | ALIGNED | ALLOW; POLICY_AND_SUPERVISOR_ALLOWED |
+| ALLOW | MISALIGNED | DENY; preserve Supervisor reason code |
+| ALLOW | UNCERTAIN | REVIEW; preserve Supervisor reason code |
+| ALLOW | Missing | REVIEW; SUPERVISOR_REQUIRED |
+
+Malformed policy or required Supervisor data returns DENY with
+INVALID_POLICY_DECISION or INVALID_SUPERVISOR_DECISION. Existing Supervisor
+client failures (including timeout) yield UNCERTAIN and therefore REVIEW.
+This pure combiner performs no LLM calls, audit writes, timeout enforcement,
+permit issuance, or execution. The Gateway orchestrator short-circuits
+policy DENY/REVIEW and logs stage/final decisions. ALLOW does not replace permits or
+other required security checks. SCHEMA_VERSION remains 0.1.0.
+
+
+### Day 3 Gateway orchestration
+
+`SecurityOrchestrator` in `gateway/orchestrator.py` evaluates Policy, persists its
+verdict, and calls Supervisor only for policy ALLOW. It persists the Supervisor
+verdict and passes both assessments to DecisionEngine, then persists the final
+`security_decision` before returning. Policy DENY/REVIEW skips Supervisor.
+`create_app(..., supervisor=supervisor)` supplies the trusted backend instance.
+
+Missing Supervisor, evaluation errors, and provider timeouts do not authorize
+execution. Supervisor client calls must enforce their provider timeout; the
+synchronous orchestrator does not impose a separate hard deadline. HTTP returns
+403 for DENY/REVIEW. A final ALLOW reaches only an explicitly injected demo
+Executor; otherwise it returns 501. No configured policy retains receipt-only
+501 behavior. Audit failures return 503 and prevent downstream dispatch.
+
+Audit event order: `tool_call_received`, `policy_decision`, optional
+`supervisor_decision`, `security_decision`, and (only after demo execution)
+`tool_result`. All share request_id. Supervisor metadata stores verdict and
+reason_code; raw LLM-generated reason text is excluded to avoid logging sensitive
+content. Common schemas and SCHEMA_VERSION remain unchanged.

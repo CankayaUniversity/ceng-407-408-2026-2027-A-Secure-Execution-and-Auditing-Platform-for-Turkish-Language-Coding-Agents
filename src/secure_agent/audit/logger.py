@@ -2,6 +2,9 @@
 
 from datetime import datetime, timezone
 from uuid import uuid4
+from typing import Literal
+
+from secure_agent.security.supervisor import SupervisorDecision
 
 from secure_agent.audit.repository import AuditRepository
 from secure_agent.common.schemas import AuditEvent, SecurityDecision, ToolCall, ToolResult, parse_tool_call
@@ -25,7 +28,8 @@ class AuditLogger:
         return event
 
     def log_security_decision(
-        self, call: ToolCall, decision: SecurityDecision,
+        self, call: ToolCall, decision: SecurityDecision, *,
+        event_type: Literal["policy_decision", "security_decision"] = "policy_decision",
     ) -> AuditEvent:
         """Record a policy verdict, not permission to execute a tool."""
         call = parse_tool_call(call)
@@ -34,7 +38,7 @@ class AuditLogger:
         event = AuditEvent(
             event_id=str(uuid4()),
             request_id=call.request_id,
-            event_type="policy_decision",
+            event_type=event_type,
             timestamp=datetime.now(timezone.utc),
             metadata={
                 "task_id": call.task_id,
@@ -55,6 +59,21 @@ class AuditLogger:
             event_type="tool_result", timestamp=datetime.now(timezone.utc),
             metadata={"status": result.status, "source_id": result.source_id,
                       "trust_level": result.trust_level},
+        )
+        self.repository.add(event)
+        return event
+
+    def log_supervisor_decision(
+        self, call: ToolCall, decision: SupervisorDecision,
+    ) -> AuditEvent:
+        """Record verdict and trusted reason code, not raw LLM-generated text."""
+        call = parse_tool_call(call)
+        decision = SupervisorDecision.model_validate(decision)
+        event = AuditEvent(
+            event_id=str(uuid4()), request_id=call.request_id,
+            event_type="supervisor_decision", timestamp=datetime.now(timezone.utc),
+            metadata={"task_id": call.task_id, "tool": call.tool,
+                      "verdict": decision.verdict, "reason_code": decision.reason_code},
         )
         self.repository.add(event)
         return event

@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from secure_agent.common.schemas import SecurityDecision, ToolCall, ToolResult
+from secure_agent.common.schemas import ToolCall, ToolResult
 
 
 router = APIRouter()
@@ -29,15 +29,9 @@ def execute_tool(tool_call: ToolCall, request: Request) -> ToolResult:
     try:
         logger = request.app.state.audit_logger
         logger.log_tool_call_received(tool_call)
-        policy = request.app.state.policy_engine
-        if policy is not None:
-            try:
-                decision = SecurityDecision.model_validate(policy.evaluate(tool_call))
-            except Exception:
-                decision = SecurityDecision(
-                    decision="DENY", reason_code="POLICY_EVALUATION_ERROR",
-                )
-            logger.log_security_decision(tool_call, decision)
+        orchestrator = request.app.state.orchestrator
+        if orchestrator is not None:
+            decision = orchestrator.evaluate(tool_call)
     except sqlite3.Error as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
