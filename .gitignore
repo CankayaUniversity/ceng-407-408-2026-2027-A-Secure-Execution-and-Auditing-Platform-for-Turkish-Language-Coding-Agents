@@ -13,5 +13,3 @@ __pycache__/
 # Local audit database
 /data/
 
-# requirements files
-/requirements.txt

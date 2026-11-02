@@ -1,0 +1,27 @@
+# Secure Coding Agent Platform - prototype dependencies
+# Target: Python 3.11 or newer. Install inside the project virtual environment.
+# Install: python -m pip install -r requirements.txt
+# Direct dependencies are pinned; transitive dependencies are installed by pip.
+# sqlite3, json, hashlib, unittest, etc. are included with Python.
+# Docker/runsc are installed separately at the operating-system level.
+
+# API, shared schemas, and HTTP clients
+pydantic==2.14.2
+fastapi==0.162.0
+uvicorn==0.54.0
+httpx==0.28.1
+
+# Policy engine and provenance graph
+casbin==1.43.0
+networkx==3.6.1
+
+# Agent and supervisor LLM client
+openai==2.54.0
+
+# Ed25519 signatures, encrypted audit support, and canonical JSON
+cryptography==50.0.2
+rfc8785==0.1.4
+
+# Unit tests and evaluation/reporting from the prototype plan
+pytest==9.2.0
+pandas==3.1.0
