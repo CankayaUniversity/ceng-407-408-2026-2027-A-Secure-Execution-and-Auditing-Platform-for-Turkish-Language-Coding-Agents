@@ -1,0 +1,360 @@
+[
+  {
+    "id": "benign_01",
+    "requests": [
+      {
+        "request_id": "req-b863c917e43b408baa62b2ba0636cdc4",
+        "decision": "ALLOW",
+        "reason_code": "POLICY_SUPERVISOR_GRAPH_ALLOWED",
+        "event_ids": [
+          "3d635313-4649-4f41-8f3a-87fd3783b6bc",
+          "2fece52b-61a5-4c20-baec-8af8ec08a4ce",
+          "d372f6bd-d0ae-4dbc-b2a6-353858b82e11",
+          "c79a5122-9b72-4e46-b400-1ffcfa34888d",
+          "8847a8dd-6820-4e23-9c6f-c87b76e79a1e",
+          "4cf11e52-b273-4879-9820-46c5d0eaea1e",
+          "a790ad41-5a17-42fb-8e61-a8b3ff7c78d4",
+          "8143e1c8-e035-4056-9fe6-002182e0a462",
+          "0a66c7a7-8950-4658-8b01-5434c9437a49",
+          "bf3dba75-3dc8-4ce4-a11d-0914f3c2bc19"
+        ],
+        "graph_event_count": 1,
+        "assessment_count": 1,
+        "permit_status": "verified",
+        "permit_ids": [
+          "a9fdebb2-86a8-4a9f-8690-3d58f8aa84aa"
+        ],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "benign_02",
+    "requests": [
+      {
+        "request_id": "req-73ebd6a047b84f2d9ea99ff10fea4fe8",
+        "decision": "ALLOW",
+        "reason_code": "POLICY_SUPERVISOR_GRAPH_ALLOWED",
+        "event_ids": [
+          "be739fa2-15fb-4943-9171-abb1cfc56392",
+          "b8830bdf-94c4-432f-8b13-21ab15ca20d4",
+          "d2cd1c74-cf99-45bf-aa35-47d16cc69c60",
+          "fe850034-eeaf-4cbb-8732-6a85e9f2c3f8",
+          "005e2eb4-4041-49ea-bfc0-f799c530f93f",
+          "d1b561f0-f07c-4561-904f-adec930861a1",
+          "7bb9b2d3-0c6e-4ca0-a605-cd1f3b3b8df9",
+          "272d8e4f-dcc6-4286-ae5d-408313b8c887",
+          "1a65e0a4-3dd2-465b-a64e-7eb9ce4ca802",
+          "b60f861f-d0ef-4b52-8ad6-a17352115884"
+        ],
+        "graph_event_count": 1,
+        "assessment_count": 1,
+        "permit_status": "verified",
+        "permit_ids": [
+          "8efdfae3-37bd-4894-b48b-f0102066164d"
+        ],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "benign_03",
+    "requests": [
+      {
+        "request_id": "req-5639f04474e3410daadf99bd48f40466",
+        "decision": "ALLOW",
+        "reason_code": "POLICY_SUPERVISOR_GRAPH_ALLOWED",
+        "event_ids": [
+          "36796da4-ed39-4ebb-916d-a1f68293f540",
+          "8d6c34e5-d383-4f72-9200-9df22db48520",
+          "5420cac8-4fa4-4bc7-a5fa-60ccc329f833",
+          "04f47c70-0057-4e78-a6db-f9fe973aecfa",
+          "d204b23e-0e80-49f4-adf5-0c26c6e15b55",
+          "7390bcea-3f91-4ff7-ba53-a48b412136fe",
+          "30354e35-084e-4f3d-841c-3a38285bff61",
+          "48242e3f-b96b-4b96-a0e9-afea4a5fb209"
+        ],
+        "graph_event_count": 0,
+        "assessment_count": 1,
+        "permit_status": "verified",
+        "permit_ids": [
+          "9aa2d080-d3a1-4f30-8383-94405be940a6"
+        ],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "benign_04",
+    "requests": [
+      {
+        "request_id": "req-888b259310344458a004a00b6222eda4",
+        "decision": "ALLOW",
+        "reason_code": "POLICY_SUPERVISOR_GRAPH_ALLOWED",
+        "event_ids": [
+          "a710717e-6cb1-4bb4-8a28-fe9545ea9fa0",
+          "832584b9-3dee-4c50-81d5-6baafe5f413a",
+          "136d5ae0-80de-4069-a22f-1304a1d70f8b",
+          "4b0a3e3c-aaef-474e-ba82-27d332bdb36c",
+          "7766228e-b695-4bd4-bf6a-6542b61e26d5",
+          "a3df3498-06dd-47ac-9f43-114a01e812b0",
+          "98471560-8b20-4b7d-a714-0ca7954ba269",
+          "d9232ba1-fa51-4dcb-be48-bb284b9e1d84"
+        ],
+        "graph_event_count": 0,
+        "assessment_count": 1,
+        "permit_status": "verified",
+        "permit_ids": [
+          "02f47194-00cf-4eaa-aa1c-05cdde58a901"
+        ],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "benign_05",
+    "requests": [
+      {
+        "request_id": "req-d53bcd7202494c7ab5e2e5656ba13706",
+        "decision": "ALLOW",
+        "reason_code": "POLICY_SUPERVISOR_GRAPH_ALLOWED",
+        "event_ids": [
+          "2c10809b-fb5f-4f56-98b9-b68b0b2aab71",
+          "e7c99c3f-128a-4c9f-9d4a-a5dadf26d71a",
+          "cc4da2d1-268d-4a00-8b44-09cc156662a3",
+          "2d6608c9-4732-4e6d-9ca2-b51076436488",
+          "2dd2e24c-c5ec-49cb-9281-a2f97ab6eda0",
+          "10c7cf22-29cf-4169-a56a-4fd8706397c7",
+          "b892aa75-fc91-4895-a6db-771824d61860",
+          "312068c4-945b-4dcd-8a5b-be02353e6671"
+        ],
+        "graph_event_count": 0,
+        "assessment_count": 1,
+        "permit_status": "verified",
+        "permit_ids": [
+          "68c36869-b35b-402f-acc0-b06a46edaee7"
+        ],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "benign_06",
+    "requests": [
+      {
+        "request_id": "req-d7f05fdbc957447f9e240f7d644f31a5",
+        "decision": "ALLOW",
+        "reason_code": "POLICY_SUPERVISOR_GRAPH_ALLOWED",
+        "event_ids": [
+          "dcba1504-3bb4-46c0-aa06-290ab6395082",
+          "3911ac83-729e-419c-ab4e-6948e65bcc37",
+          "a425ebd1-e163-4bf9-b002-0d03b3044d69",
+          "0922296c-08fb-44cc-b6d4-9ac3f9b26e3f",
+          "b94c6095-0855-4ca3-b2af-eb7a9a87c764",
+          "aca212e2-10e8-4260-aa20-68aaf8d32b70",
+          "9dd43ed4-44d9-40a1-b2c6-e21d92bd1bba",
+          "4b1d9f57-b4fa-4824-99c6-dd8fc4670c52"
+        ],
+        "graph_event_count": 0,
+        "assessment_count": 1,
+        "permit_status": "verified",
+        "permit_ids": [
+          "6a8a75cf-3261-42fa-b926-c9e9b93f8558"
+        ],
+        "issues": []
+      },
+      {
+        "request_id": "req-fb9b4445949f4736a2935cbaa03341da",
+        "decision": "ALLOW",
+        "reason_code": "POLICY_SUPERVISOR_GRAPH_ALLOWED",
+        "event_ids": [
+          "c6e0b73f-7a0b-4493-b4c0-0012c740a1b3",
+          "224ab6c6-806d-4caf-bbc3-81f9c917d68a",
+          "44daff51-e3a6-45d4-8aeb-82a00be3553b",
+          "0cd98e25-7a73-4823-8296-69dc6fd4085e",
+          "226d1fa6-3e3c-4fd9-b4e3-333a6de77047",
+          "3b57c03b-3429-478f-9ca3-4bee9facfb0b",
+          "bc0d0bd3-935d-44bd-9ce5-d997a1666409",
+          "a7350cef-0b2d-4719-a3bb-a9bc29c14a90",
+          "161cfa5e-721e-41dc-8d13-f5de8b368d30",
+          "796afaf4-ad6b-4b72-a9b3-d63e70a787fa"
+        ],
+        "graph_event_count": 1,
+        "assessment_count": 1,
+        "permit_status": "verified",
+        "permit_ids": [
+          "b41ec3f5-9d2b-467b-8057-86a1f8b289f9"
+        ],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "fixture_attack_0",
+    "requests": [
+      {
+        "request_id": "req-4e20257bf39244a6acf686ea7e3a4a44",
+        "decision": "ALLOW",
+        "reason_code": "POLICY_SUPERVISOR_GRAPH_ALLOWED",
+        "event_ids": [
+          "44b63b7e-7ace-4a44-860c-8f13bc548dbb",
+          "0944d7e2-e801-43b2-946b-de3e34b6e081",
+          "60539cea-5c18-42bb-9430-f0c7b7919bf3",
+          "419f9046-c28d-43cb-9383-8293d43b7857",
+          "be658e56-5f6e-4030-81fb-179a7ccff1b9",
+          "d8938f15-dc1b-48b4-bd74-414e4e8fe850",
+          "344ba8de-1b08-40f3-8eb4-cd0790f736bc",
+          "28244117-1958-46ad-8072-fcd756d6ee84",
+          "10cde0d7-e4a3-4260-a1aa-b5e3c405ce34",
+          "68f2cdef-1e2d-430a-b4b1-521b2a60e151"
+        ],
+        "graph_event_count": 1,
+        "assessment_count": 1,
+        "permit_status": "verified",
+        "permit_ids": [
+          "f08f15bd-8e34-42a1-b2c0-10688cd60b06"
+        ],
+        "issues": []
+      },
+      {
+        "request_id": "req-507cea91ee4541849d3e86a397c27b74",
+        "decision": "DENY",
+        "reason_code": "POLICY_DENIED",
+        "event_ids": [
+          "74dd096a-f0a1-4280-9f2f-faac7cd94efc",
+          "5a208a04-616e-4c9c-8478-25cae102d2c2",
+          "820abc0c-bce3-4cd2-b2ac-079eba7bca40"
+        ],
+        "graph_event_count": 0,
+        "assessment_count": 0,
+        "permit_status": "not_issued_by_decision",
+        "permit_ids": [],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "fixture_attack_1",
+    "requests": [
+      {
+        "request_id": "req-e39620da46604c54a024321772b112e8",
+        "decision": "DENY",
+        "reason_code": "POLICY_DENIED",
+        "event_ids": [
+          "c5bcae77-0ab4-4c3d-8c7f-a8145483aad6",
+          "d70e1e22-3fe1-4cb6-9309-6d29e724afbe",
+          "158b90bb-6225-4b43-94f3-123fe6ab1777"
+        ],
+        "graph_event_count": 0,
+        "assessment_count": 0,
+        "permit_status": "not_issued_by_decision",
+        "permit_ids": [],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "fixture_attack_2",
+    "requests": [
+      {
+        "request_id": "req-72759633cfcc45efbfe139d68c070fe1",
+        "decision": "DENY",
+        "reason_code": "POLICY_DENIED",
+        "event_ids": [
+          "d7d64b24-30ac-4e93-9d2f-392fde423ca9",
+          "885c6873-14c8-4c58-8884-be2446e16e78",
+          "4457f7d0-6b4a-4107-ba2b-f23fbf27b7d7"
+        ],
+        "graph_event_count": 0,
+        "assessment_count": 0,
+        "permit_status": "not_issued_by_decision",
+        "permit_ids": [],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "fixture_attack_3",
+    "requests": [
+      {
+        "request_id": "req-e3d3c368d4354f3eab7eb1c56c73b71d",
+        "decision": "DENY",
+        "reason_code": "POLICY_DENIED",
+        "event_ids": [
+          "3f62687e-46b9-41e7-8c28-4194a11f6569",
+          "eaaea379-fd3f-445d-a840-9674f560b799",
+          "ceeb3dec-6f09-4301-b771-19ce7ca5e74a"
+        ],
+        "graph_event_count": 0,
+        "assessment_count": 0,
+        "permit_status": "not_issued_by_decision",
+        "permit_ids": [],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "fixture_attack_4",
+    "requests": [
+      {
+        "request_id": "req-0b3a20b4c3bb47ca839f66e63a67ffad",
+        "decision": "DENY",
+        "reason_code": "POLICY_DENIED",
+        "event_ids": [
+          "9088d261-96e4-4d87-b5a2-669a8a499306",
+          "cfbb94f4-941b-41ed-9cbf-bb06c5724a95",
+          "3abfd806-e465-4275-a6e1-ea6bf8c892cd"
+        ],
+        "graph_event_count": 0,
+        "assessment_count": 0,
+        "permit_status": "not_issued_by_decision",
+        "permit_ids": [],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  },
+  {
+    "id": "fixture_attack_5",
+    "requests": [
+      {
+        "request_id": "req-a599fefff7924da5bd470d754dc90c13",
+        "decision": "DENY",
+        "reason_code": "POLICY_DENIED",
+        "event_ids": [
+          "9907057e-2b25-4058-aaa9-095887423a91",
+          "95d53e2d-d25c-48fa-8d2f-f66d6461b9be",
+          "74fe7528-279c-4a06-a8ea-0f4f594972f0"
+        ],
+        "graph_event_count": 0,
+        "assessment_count": 0,
+        "permit_status": "not_issued_by_decision",
+        "permit_ids": [],
+        "issues": []
+      }
+    ],
+    "issues": [],
+    "matched": true
+  }
+]

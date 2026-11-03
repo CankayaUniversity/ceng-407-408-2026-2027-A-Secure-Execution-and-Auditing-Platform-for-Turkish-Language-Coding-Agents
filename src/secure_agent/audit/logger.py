@@ -116,3 +116,18 @@ class AuditLogger:
         )
         self.repository.add(event)
         return event
+
+
+    def log_permit_event(self, call: ToolCall, permit_id: str, *,
+                         outcome: Literal["issued", "verified", "rejected"]) -> AuditEvent:
+        """Record the permit identity and outcome without its signature or nonce."""
+        call = parse_tool_call(call)
+        event = AuditEvent(
+            event_id=str(uuid4()), request_id=call.request_id,
+            event_type="permit_issued" if outcome == "issued" else "permit_verification",
+            timestamp=datetime.now(timezone.utc),
+            metadata={"task_id": call.task_id, "tool": call.tool, "permit_id": permit_id,
+                      "outcome": outcome},
+        )
+        self.repository.add(event)
+        return event

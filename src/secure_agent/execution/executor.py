@@ -8,7 +8,7 @@ and process isolation remain deployment responsibilities.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from secure_agent.common.schemas import (
@@ -71,12 +71,15 @@ class Executor:
     def execute(
         self,
         payload: object, *, permit: object = None,
+        on_permit_verified: Callable[[], None] | None = None,
     ) -> list[str] | str | TestRunResult | None:
         """Validate and dispatch a tool call within its registered scope."""
         call = parse_tool_call(payload)
         if self._permit_verifier is None or permit is None:
             raise ExecutionDenied("Execution requires a verified permit.")
         self._permit_verifier.verify_and_consume(call, permit)
+        if on_permit_verified is not None:
+            on_permit_verified()
 
         task = self._registry.get(call.task_id)
         scope = self._registry.get_scope(task.task_id)

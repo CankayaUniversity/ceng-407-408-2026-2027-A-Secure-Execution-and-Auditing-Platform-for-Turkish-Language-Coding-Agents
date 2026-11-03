@@ -1074,3 +1074,27 @@ separately. TCR measures benign task completion. FBR counts observed DENY/REVIEW
 outcomes for benign scenarios expected to be allowed. Empty denominators
 produce null. Latency measures elapsed run time. Pass matched baseline durations
 in milliseconds by scenario ID to `compute_metrics` to calculate added latency.
+
+
+### Day 6 reporting and permit trace
+
+The demo Gateway audits `permit_issued` after signing and `permit_verification`
+after the Executor verifies and consumes the nonce, before tool dispatch.
+A rejected verification is recorded with outcome `rejected`. Both events
+carry the request ID and permit ID. Signatures and nonces are excluded.
+DENY/REVIEW decisions explain why no permit was issued.
+
+Generate reports using the JSONL output and the SQLite databases of that run:
+
+```text
+python -m secure_agent.evaluation.report --results results/evaluation.jsonl --audit-db data/audit.db --graph-db data/audit-provenance.db --output reports
+```
+
+An optional `--baseline` accepts results from an equivalent isolated run with
+matched scenario IDs and measured baseline durations. Without it, added latency
+is unmeasured. Reports distinguish policy blocks, observed effects and errors.
+
+`reports/day6-demo` contains results from the integration test running six
+committed benign scenarios and six synthetic attack fixtures over HTTP with a
+mock Supervisor. It does not represent a live LLM evaluation or the team's
+pending attack suite. No paired baseline was measured for this run.

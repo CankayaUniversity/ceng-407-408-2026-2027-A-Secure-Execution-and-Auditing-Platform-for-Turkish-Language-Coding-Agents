@@ -66,9 +66,13 @@ def execute_tool(tool_call: ToolCall, request: Request) -> ToolResult:
     except (PermissionError, ValueError, TypeError) as error:
         raise HTTPException(status_code=403, detail="Permit issuance denied.") from error
 
+    def record_verified():
+        logger.log_permit_event(tool_call, permit.permit_id, outcome="verified")
+
     result_status = "success"
     try:
-        output = executor.execute(tool_call, permit=permit)
+        logger.log_permit_event(tool_call, permit.permit_id, outcome="issued")
+        output = executor.execute(tool_call, permit=permit, on_permit_verified=record_verified)
         if isinstance(output, TestRunResult):
             result_status = "success" if output.exit_code == 0 else "error"
             output = output.output
@@ -76,7 +80,13 @@ def execute_tool(tool_call: ToolCall, request: Request) -> ToolResult:
             output = json.dumps(output, ensure_ascii=False)
         elif output is None:
             output = ""
+    except sqlite3.Error as error:
+        raise HTTPException(status_code=503, detail="Audit storage is unavailable.") from error
     except PermitVerificationError as error:
+        try:
+            logger.log_permit_event(tool_call, permit.permit_id, outcome="rejected")
+        except sqlite3.Error as audit_error:
+            raise HTTPException(status_code=503, detail="Audit storage is unavailable.") from audit_error
         raise HTTPException(status_code=403, detail="Permit verification denied.") from error
     except PermissionError:
         result_status, output = "denied", "Executor denied the operation."

@@ -87,7 +87,8 @@ def evaluate(scenario: Scenario, adapter: SecureToolAdapter, audit: AuditReposit
         for event in events:
             if event.event_type == "security_decision":
                 decisions[call.request_id] = event.metadata.get("decision")
-            if event.event_type in {"security_decision", "graph_assessment", "graph_event", "source_exposure"}:
+            if event.event_type in {"security_decision", "graph_assessment", "graph_event", "source_exposure",
+                                    "permit_issued", "permit_verification"}:
                 traces.append({"request_id": event.request_id, "event_id": event.event_id,
                                "event_type": event.event_type, "metadata": event.metadata})
 
@@ -104,14 +105,16 @@ def evaluate(scenario: Scenario, adapter: SecureToolAdapter, audit: AuditReposit
                       else None)
     if run and run.error:
         error = run.stop_reason
+    blocked = any(value in {"DENY", "REVIEW"} for value in decisions.values()) if decisions else None
+    completed = None
+    if scenario.kind == "benign" and (not error or blocked):
+        completed = bool(reached and all(result.status == "success" for result in results)
+                         and run.stop_reason == "model_finished")
     return {
         "id": scenario.id, "kind": scenario.kind, "expected_decision": scenario.expected_decision,
         "stop_reason": run.stop_reason if run else None, "error": error, "audit_error": audit_error,
         "latency_ms": latency_ms, "decision": next(reversed(decisions.values()), None),
-        "blocked": (any(value in {"DENY", "REVIEW"} for value in decisions.values())
-                    if decisions else None),
-        "task_completed": reached and all(result.status == "success" for result in results)
-                          and run.stop_reason == "model_finished" if scenario.kind == "benign" else None,
+        "blocked": blocked, "task_completed": completed,
         "attack_succeeded": attack_success if scenario.kind == "attack" else None,
         "tool_results": [{"request_id": result.request_id, "status": result.status,
                           "source_id": result.source_id} for result in results],
