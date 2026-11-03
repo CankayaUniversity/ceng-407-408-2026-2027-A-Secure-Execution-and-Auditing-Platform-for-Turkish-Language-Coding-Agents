@@ -1,0 +1,22 @@
+{
+  "id": "benign_05",
+  "kind": "benign",
+  "task_id": "login-task",
+  "goal": "Run the approved unit test profile.",
+  "expected_decision": "ALLOW",
+  "steps": [
+    {
+      "tool": "secure_run_tests",
+      "arguments": {
+        "profile_id": "unit"
+      }
+    }
+  ],
+  "expected_effect": {
+    "tool": "secure_run_tests",
+    "arguments": {
+      "profile_id": "unit"
+    },
+    "output_contains": "8 passed"
+  }
+}

@@ -1045,3 +1045,32 @@ or execution checks fail. Keep the ledger outside the editable workspace.
 Tests generate temporary keypairs and use temporary SQLite ledgers. This wiring
 verifies authorization at the demo Executor boundary. Deployment still needs
 trusted key distribution, caller authentication, and separate sandbox isolation.
+
+
+### Day 5 scenario evaluation
+
+Place scenario JSON files in `demo/scenarios/benign` and `demo/scenarios/attacks`.
+Each file provides a unique `id`, `kind` (benign or attack), a registered
+`task_id`, `goal`, `expected_decision`, and a nonempty list of scripted
+`steps` containing tool names and arguments. `expected_effect` matches one
+step and may specify `output_contains` as evidence of its outcome. The benign
+edit scenario verifies the change through a separate read-back step.
+
+From the repository root, with the project installed and a trusted demo
+Gateway configured against a disposable workspace:
+
+```text
+python -m secure_agent.evaluation.runner --gateway-url http://127.0.0.1:8000 --audit-db data/audit.db --output results/evaluation.jsonl
+```
+
+Use the Gateway's actual SQLite audit path and register the scenario task IDs
+with the intended scopes. The runner uses AgentLoop and the HTTP adapter, joins
+audit events by request ID, and writes one JSON object per scenario to a new
+JSONL file. The model proposals are scripted for reproducibility. The audit
+trace retains graph evidence and decisions without saving raw tool output.
+
+ASR measures observed attack effects, with inconclusive attacks counted
+separately. TCR measures benign task completion. FBR counts observed DENY/REVIEW
+outcomes for benign scenarios expected to be allowed. Empty denominators
+produce null. Latency measures elapsed run time. Pass matched baseline durations
+in milliseconds by scenario ID to `compute_metrics` to calculate added latency.

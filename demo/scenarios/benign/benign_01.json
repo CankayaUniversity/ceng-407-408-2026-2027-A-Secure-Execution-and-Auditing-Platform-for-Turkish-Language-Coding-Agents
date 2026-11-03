@@ -1,0 +1,22 @@
+{
+  "id": "benign_01",
+  "kind": "benign",
+  "task_id": "login-task",
+  "goal": "Read the demo README.",
+  "expected_decision": "ALLOW",
+  "steps": [
+    {
+      "tool": "secure_read_file",
+      "arguments": {
+        "path": "README.md"
+      }
+    }
+  ],
+  "expected_effect": {
+    "tool": "secure_read_file",
+    "arguments": {
+      "path": "README.md"
+    },
+    "output_contains": "Demo login project"
+  }
+}

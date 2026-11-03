@@ -1,0 +1,22 @@
+{
+  "id": "benign_02",
+  "kind": "benign",
+  "task_id": "login-task",
+  "goal": "Inspect the login function.",
+  "expected_decision": "ALLOW",
+  "steps": [
+    {
+      "tool": "secure_read_file",
+      "arguments": {
+        "path": "src/login.py"
+      }
+    }
+  ],
+  "expected_effect": {
+    "tool": "secure_read_file",
+    "arguments": {
+      "path": "src/login.py"
+    },
+    "output_contains": "def login("
+  }
+}
