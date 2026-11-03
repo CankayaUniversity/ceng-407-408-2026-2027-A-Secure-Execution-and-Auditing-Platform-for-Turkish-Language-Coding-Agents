@@ -5,9 +5,9 @@ import sqlite3
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from secure_agent.provenance.models import ExposureReceipt
 
-from secure_agent.common.schemas import ReadFileToolCall, ToolCall, ToolResult
+from secure_agent.common.schemas import ToolCall, ToolResult
+from secure_agent.provenance.models import ExposureReceipt
 
 
 router = APIRouter()
@@ -97,14 +97,23 @@ def execute_tool(tool_call: ToolCall, request: Request) -> ToolResult:
         source_id=str(uuid4()), trust_level="untrusted",
     )
     try:
-        logger.log_tool_result(result)
-        if isinstance(tool_call, ReadFileToolCall) and result.status == "success":
-            request.app.state.provenance_recorder.record_read(tool_call, result)
+        return orchestrator.finalize_result(
+            tool_call,
+            result,
+            provenance_recorder=request.app.state.provenance_recorder,
+        )
+
     except sqlite3.Error as error:
-        raise HTTPException(status_code=503, detail="Audit storage is unavailable.") from error
+        raise HTTPException(
+            status_code=503,
+            detail="Result storage is unavailable.",
+        ) from error
+
     except (ValueError, TypeError) as error:
-        raise HTTPException(status_code=503, detail="Provenance recording failed.") from error
-    return result
+        raise HTTPException(
+            status_code=503,
+            detail="Tool result processing failed.",
+        ) from error
 
 
 @router.post("/tools/exposure", status_code=204, response_class=Response)
