@@ -15,6 +15,7 @@ from secure_agent.execution.executor import Executor
 from secure_agent.execution.test_runner import TestRunner as FixedTestRunner
 from secure_agent.gateway.main import create_app
 from secure_agent.security.policy_engine import PolicyEngine
+from secure_agent.security.permit_issuer import PermitIssuer
 from secure_agent.tasks.registry import TaskRegistry
 from secure_agent.tasks.scope import TaskScope
 from secure_agent.security.supervisor import SupervisorDecision
@@ -30,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
-def policy_demo(tmp_path):
+def policy_demo(tmp_path, permit_material):
     workspace = tmp_path / "workspace"
     shutil.copytree(ROOT / "demo/sample_project", workspace)
     (workspace / ".env").write_text("DEMO_SECRET=private", encoding="utf-8")
@@ -51,9 +52,10 @@ def policy_demo(tmp_path):
                           model_path=ROOT / "configs/casbin_model.conf",
                           policy_path=ROOT / "configs/casbin_policy.csv")
     runner = FixedTestRunner(workspace, ROOT / "configs/test_profiles.yaml")
-    executor = Executor(registry=registry, workspace_roots={"demo": workspace},
+    key, _, verifier = permit_material
+    executor = Executor(permit_verifier=verifier,registry=registry, workspace_roots={"demo": workspace},
                         test_runners={"demo": runner})
-    return workspace, policy, executor
+    return workspace, policy, executor, key
 
 
 @pytest.mark.parametrize("tool,path,expected", [
@@ -66,7 +68,7 @@ def policy_demo(tmp_path):
 ])
 def test_policy_decision_and_audit(policy_demo, audit_logger, audit_repository,
                                    tool, path, expected):
-    workspace, policy, executor = policy_demo
+    workspace, policy, executor, key = policy_demo
     before = (workspace / path).read_bytes().decode("utf-8")
     arguments = {"path": path}
     if tool == "secure_edit_file":
@@ -78,7 +80,8 @@ def test_policy_decision_and_audit(policy_demo, audit_logger, audit_repository,
     assert decision.decision == expected
     audit_logger.log_security_decision(call, decision)
     if expected == "ALLOW":
-        output = executor.execute(call)
+        permit = PermitIssuer(private_key=key, decision_provider=policy.evaluate).issue(call)
+        output = executor.execute(call, permit=permit)
         if tool == "secure_read_file":
             assert output == before
         else:
@@ -94,7 +97,7 @@ def test_policy_decision_and_audit(policy_demo, audit_logger, audit_repository,
 
 
 def test_parent_traversal_is_rejected_before_policy(tmp_path, policy_demo):
-    workspace, _, _ = policy_demo
+    workspace, _, _, key = policy_demo
     outside = workspace.parent / "secret.txt"
     with TestClient(create_app(tmp_path / "audit.db")) as client:
         response = client.post("/tools/execute", json={
@@ -111,7 +114,7 @@ def test_parent_traversal_is_rejected_before_policy(tmp_path, policy_demo):
     ("src/config.py", "DENY", 403),
 ])
 def test_gateway_records_real_policy_verdict(tmp_path, policy_demo, path, expected, status_code):
-    workspace, policy, _ = policy_demo
+    workspace, policy, _, key = policy_demo
     database = tmp_path / "gateway-audit.db"
     before = (workspace / path).read_bytes()
     with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor())) as client:
@@ -123,7 +126,7 @@ def test_gateway_records_real_policy_verdict(tmp_path, policy_demo, path, expect
     events = AuditRepository(database).get_by_request_id("gateway-policy")
     expected_events = ["tool_call_received", "policy_decision"]
     if expected == "ALLOW":
-        expected_events.append("supervisor_decision")
+        expected_events.extend(["graph_assessment", "supervisor_decision"])
     assert [e.event_type for e in events] == expected_events + ["security_decision"]
     assert events[1].metadata["decision"] == expected
     assert events[1].metadata["reason_code"] == f"POLICY_{'ALLOWED' if expected == 'ALLOW' else 'DENIED'}"
@@ -131,7 +134,7 @@ def test_gateway_records_real_policy_verdict(tmp_path, policy_demo, path, expect
 
 
 def test_gateway_policy_error_is_denied_and_audited(tmp_path, monkeypatch, policy_demo):
-    _, policy, _ = policy_demo
+    _, policy, _, key = policy_demo
 
     def fail(call):
         raise RuntimeError("Internal policy failure")
@@ -158,11 +161,11 @@ def live_demo_gateway(tmp_path, policy_demo, monkeypatch):
 
     import uvicorn
 
-    workspace, policy, executor = policy_demo
+    workspace, policy, executor, key = policy_demo
     execute = Mock(wraps=executor.execute)
     monkeypatch.setattr(executor, "execute", execute)
     database = tmp_path / "live-demo.db"
-    app = create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(), demo_executor=executor)
+    app = create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(), demo_executor=executor, demo_private_key=key)
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -209,19 +212,21 @@ def test_agent_gateway_policy_executor_flow(live_demo_gateway, tool, path, allow
     events = AuditRepository(database).get_by_request_id(call.request_id)
     assert events[1].metadata["decision"] == ("ALLOW" if allowed else "DENY")
     if allowed:
-        execute.assert_called_once_with(call)
+        execute.assert_called_once()
+        assert execute.call_args.args == (call,)
+        assert execute.call_args.kwargs["permit"].task_id == call.task_id
         assert run.stop_reason == "model_finished"
         assert len(run.tool_results) == 1
         result = run.tool_results[0]
         assert result.request_id == call.request_id
         assert result.status == "success"
         assert result.trust_level == "untrusted"
-        expected_events = ["tool_call_received", "policy_decision", "supervisor_decision",
+        expected_events = ["tool_call_received", "policy_decision", "graph_assessment", "supervisor_decision",
                            "security_decision", "tool_result"]
         if tool == "secure_read_file":
             expected_events.append("graph_event")
         assert [e.event_type for e in events] == expected_events
-        assert events[4].metadata["source_id"] == result.source_id
+        assert events[5].metadata["source_id"] == result.source_id
         assert all("output" not in event.metadata for event in events)
         if tool == "secure_read_file":
             assert result.output == before.decode("utf-8")
@@ -237,20 +242,20 @@ def test_agent_gateway_policy_executor_flow(live_demo_gateway, tool, path, allow
 
 
 def test_demo_executor_requires_policy(tmp_path, policy_demo):
-    _, _, executor = policy_demo
+    _, _, executor, key = policy_demo
     with pytest.raises(ValueError, match="requires a trusted policy"):
-        create_app(tmp_path / "audit.db", demo_executor=executor)
+        create_app(tmp_path / "audit.db", demo_executor=executor, demo_private_key=key)
 
 
 def test_audit_failure_prevents_demo_execution(tmp_path, policy_demo, monkeypatch):
     import sqlite3
     from unittest.mock import Mock
 
-    _, policy, executor = policy_demo
+    _, policy, executor, key = policy_demo
     execute = Mock(wraps=executor.execute)
     monkeypatch.setattr(executor, "execute", execute)
     database = tmp_path / "audit-failure.db"
-    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
+    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(), demo_executor=executor, demo_private_key=key)) as client:
         with sqlite3.connect(database) as connection:
             connection.execute("DROP TABLE audit_events")
         response = client.post("/tools/execute", json={
@@ -268,9 +273,9 @@ def test_audit_failure_prevents_demo_execution(tmp_path, policy_demo, monkeypatc
 def test_demo_list_and_fixed_test_profile(tmp_path, policy_demo, tool, arguments):
     import json
 
-    _, policy, executor = policy_demo
+    _, policy, executor, key = policy_demo
     database = tmp_path / "other-tools.db"
-    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
+    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(), demo_executor=executor, demo_private_key=key)) as client:
         response = client.post("/tools/execute", json={
             "request_id": tool, "task_id": "login-task", "tool": tool,
             "arguments": arguments,
@@ -292,7 +297,7 @@ def test_gateway_supervisor_cannot_authorize_uncertain_work(
 ):
     from unittest.mock import Mock
 
-    workspace, policy, executor = policy_demo
+    workspace, policy, executor, key = policy_demo
     execute = Mock(wraps=executor.execute)
     monkeypatch.setattr(executor, "execute", execute)
     supervisor = Mock()
@@ -305,7 +310,7 @@ def test_gateway_supervisor_cannot_authorize_uncertain_work(
         )
     database = tmp_path / "supervisor-audit.db"
     before = (workspace / "src/login.py").read_bytes()
-    with TestClient(create_app(database, policy_engine=policy, demo_executor=executor,
+    with TestClient(create_app(database, policy_engine=policy, demo_executor=executor, demo_private_key=key,
                                supervisor=None if assessment == "missing" else supervisor)) as client:
         response = client.post("/tools/execute", json={
             "request_id": "supervisor-check", "task_id": "login-task",
@@ -316,7 +321,7 @@ def test_gateway_supervisor_cannot_authorize_uncertain_work(
     assert (workspace / "src/login.py").read_bytes() == before
     events = AuditRepository(database).get_by_request_id("supervisor-check")
     assert [e.event_type for e in events] == [
-        "tool_call_received", "policy_decision", "supervisor_decision", "security_decision",
+        "tool_call_received", "policy_decision", "graph_assessment", "supervisor_decision", "security_decision",
     ]
     assert events[-1].metadata["decision"] == ("DENY" if assessment == "MISALIGNED" else "REVIEW")
 
@@ -325,7 +330,7 @@ def test_final_decision_audit_failure_prevents_execution(tmp_path, policy_demo, 
     import sqlite3
     from unittest.mock import Mock
 
-    _, policy, executor = policy_demo
+    _, policy, executor, key = policy_demo
     execute = Mock(wraps=executor.execute)
     monkeypatch.setattr(executor, "execute", execute)
     original_add = AuditRepository.add
@@ -337,7 +342,7 @@ def test_final_decision_audit_failure_prevents_execution(tmp_path, policy_demo, 
 
     monkeypatch.setattr(AuditRepository, "add", fail_final)
     with TestClient(create_app(tmp_path / "final-audit.db", policy_engine=policy,
-                               supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
+                               supervisor=AlignedSupervisor(), demo_executor=executor, demo_private_key=key)) as client:
         response = client.post("/tools/execute", json={
             "request_id": "final-audit-failure", "task_id": "login-task",
             "tool": "secure_read_file", "arguments": {"path": "src/login.py"},
@@ -350,17 +355,23 @@ def test_final_decision_audit_failure_prevents_execution(tmp_path, policy_demo, 
 def test_gateway_readme_graph_survives_restart(tmp_path, policy_demo):
     from secure_agent.provenance.repository import ProvenanceRepository
 
-    _, policy, executor = policy_demo
+    _, policy, executor, key = policy_demo
     database = tmp_path / "graph-audit.db"
     graph_database = tmp_path / "graph-audit-provenance.db"
     for request_id in ("readme-first", "readme-second"):
         # Recreate the app to prove graph history is loaded from SQLite.
         with TestClient(create_app(database, policy_engine=policy,
-                                   supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
+                                   supervisor=AlignedSupervisor(), demo_executor=executor, demo_private_key=key)) as client:
             response = client.post("/tools/execute", json={
                 "request_id": request_id, "task_id": "login-task",
                 "tool": "secure_read_file", "arguments": {"path": "README.md"},
             })
+            assert response.status_code == 200
+            receipt = response.json()
+            ack = client.post("/tools/exposure", json={
+                "request_id": request_id, "task_id": "login-task", "source_id": receipt["source_id"],
+            })
+            assert ack.status_code == 204
         assert response.status_code == 200
         result = response.json()
         graph = ProvenanceRepository(graph_database).load_graph()
@@ -369,22 +380,22 @@ def test_gateway_readme_graph_survives_restart(tmp_path, policy_demo):
         assert graph.nodes[node]["task_id"] == "login-task"
         assert graph.nodes[source]["path"] == "README.md"
         assert graph.edges[node, source]["edge_type"] == "DERIVED_FROM"
-        assert all(data["edge_type"] != "EXPOSED_TO_AGENT" for _, _, data in graph.edges(data=True))
+        assert graph.edges[node, "agent:task:login-task"]["edge_type"] == "EXPOSED_TO_AGENT"
         events = AuditRepository(database).get_by_request_id(request_id)
-        assert events[-1].event_type == "graph_event"
-        assert events[-1].metadata["result_node_id"] == node
+        assert events[-2].event_type == "graph_event"
+        assert events[-2].metadata["result_node_id"] == node
         assert result["output"] not in str(dict(graph.nodes(data=True)))
-    assert graph.number_of_nodes() == 4
-    assert graph.number_of_edges() == 2
+    assert graph.number_of_nodes() == 5
+    assert graph.number_of_edges() == 4
 
 
 def test_denied_read_adds_no_graph_nodes(tmp_path, policy_demo):
     from secure_agent.provenance.repository import ProvenanceRepository
 
-    _, policy, executor = policy_demo
+    _, policy, executor, key = policy_demo
     database = tmp_path / "denied-audit.db"
     with TestClient(create_app(database, policy_engine=policy,
-                               supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
+                               supervisor=AlignedSupervisor(), demo_executor=executor, demo_private_key=key)) as client:
         response = client.post("/tools/execute", json={
             "request_id": "denied-read", "task_id": "login-task",
             "tool": "secure_read_file", "arguments": {"path": ".env"},
@@ -399,17 +410,157 @@ def test_graph_failure_does_not_return_read_output(tmp_path, policy_demo, monkey
     import sqlite3
     from secure_agent.provenance.repository import ProvenanceRepository
 
-    _, policy, executor = policy_demo
+    _, policy, executor, key = policy_demo
 
     def fail_save(self, graph):
         raise sqlite3.OperationalError("Graph write failure")
 
     monkeypatch.setattr(ProvenanceRepository, "save_graph", fail_save)
     with TestClient(create_app(tmp_path / "failure.db", policy_engine=policy,
-                               supervisor=AlignedSupervisor(), demo_executor=executor)) as client:
+                               supervisor=AlignedSupervisor(), demo_executor=executor, demo_private_key=key)) as client:
         response = client.post("/tools/execute", json={
             "request_id": "graph-failure", "task_id": "login-task",
             "tool": "secure_read_file", "arguments": {"path": "README.md"},
         })
     assert response.status_code == 503
     assert "output" not in response.json()
+
+
+
+def test_adapter_acknowledgement_feeds_next_graph_assessment(live_demo_gateway):
+    from agent.agent_loop import AgentLoop
+    from agent.tool_adapter import SecureToolAdapter
+    from secure_agent.provenance.repository import ProvenanceRepository
+
+    _, database, execute, url = live_demo_gateway
+
+    class ReadTwoFiles:
+        def propose(self, *, history, **kwargs):
+            paths = ["README.md", "src/login.py"]
+            if len(history) == len(paths):
+                return None
+            return {"tool": "secure_read_file", "arguments": {"path": paths[len(history)]}}
+
+    adapter = SecureToolAdapter(url, acknowledge_exposure=True)
+    run = AgentLoop(ReadTwoFiles(), task_id="login-task", adapter=adapter).run("Inspect login.")
+    assert run.stop_reason == "model_finished"
+    assert len(run.tool_results) == 2
+    assert execute.call_count == 2
+    second = AuditRepository(database).get_by_request_id(run.tool_calls[1].request_id)
+    graph_event = next(e for e in second if e.event_type == "graph_assessment")
+    assert graph_event.metadata["available"] is True
+    assert graph_event.metadata["risk_flags"] == ["UNTRUSTED_SOURCE_EXPOSURE"]
+    assert graph_event.metadata["source_ids"] == [run.tool_results[0].source_id]
+    graph = ProvenanceRepository(database.with_name(database.stem + "-provenance.db")).load_graph()
+    for result in run.tool_results:
+        assert graph.edges[f"result:{result.request_id}", "agent:task:login-task"]["edge_type"] == "EXPOSED_TO_AGENT"
+
+
+def test_exposure_acknowledgement_rejects_wrong_task(tmp_path, policy_demo):
+    _, policy, executor, key = policy_demo
+    database = tmp_path / "ack.db"
+    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(),
+                               demo_executor=executor, demo_private_key=key)) as client:
+        result = client.post("/tools/execute", json={
+            "request_id": "original", "task_id": "login-task",
+            "tool": "secure_read_file", "arguments": {"path": "README.md"},
+        }).json()
+        ack = client.post("/tools/exposure", json={
+            "request_id": "original", "task_id": "other-task", "source_id": result["source_id"],
+        })
+    assert ack.status_code == 409
+
+
+def test_unavailable_graph_blocks_execution_and_is_audited(tmp_path, policy_demo, monkeypatch):
+    from unittest.mock import Mock
+    from secure_agent.provenance.repository import ProvenanceRepository
+
+    _, policy, executor, key = policy_demo
+    execute = Mock(wraps=executor.execute)
+    monkeypatch.setattr(executor, "execute", execute)
+    database = tmp_path / "no-graph.db"
+    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(),
+                               demo_executor=executor, demo_private_key=key)) as client:
+        def fail_load(self):
+            raise ValueError("Corrupt graph")
+        monkeypatch.setattr(ProvenanceRepository, "load_graph", fail_load)
+        response = client.post("/tools/execute", json={
+            "request_id": "unavailable", "task_id": "login-task",
+            "tool": "secure_read_file", "arguments": {"path": "README.md"},
+        })
+    assert response.status_code == 403
+    execute.assert_not_called()
+    events = AuditRepository(database).get_by_request_id("unavailable")
+    assert next(e for e in events if e.event_type == "graph_assessment").metadata["available"] is False
+    assert events[-1].metadata["decision"] == "REVIEW"
+    assert events[-1].metadata["reason_code"] == "GRAPH_REQUIRED"
+
+
+
+def test_pending_delivery_requires_review(tmp_path, policy_demo):
+    _, policy, executor, key = policy_demo
+    database = tmp_path / "pending.db"
+    with TestClient(create_app(database, policy_engine=policy, supervisor=AlignedSupervisor(),
+                               demo_executor=executor, demo_private_key=key)) as client:
+        first = client.post("/tools/execute", json={
+            "request_id": "pending-first", "task_id": "login-task",
+            "tool": "secure_read_file", "arguments": {"path": "README.md"},
+        })
+        assert first.status_code == 200
+        second = client.post("/tools/execute", json={
+            "request_id": "pending-second", "task_id": "login-task",
+            "tool": "secure_read_file", "arguments": {"path": "src/login.py"},
+        })
+    assert second.status_code == 403
+    events = AuditRepository(database).get_by_request_id("pending-second")
+    graph = next(e for e in events if e.event_type == "graph_assessment")
+    assert graph.metadata["risk_flags"] == ["GRAPH_INCOMPLETE"]
+    assert events[-1].metadata["decision"] == "REVIEW"
+
+
+def test_exposure_endpoint_is_disabled_without_demo_executor(tmp_path):
+    with TestClient(create_app(tmp_path / "default.db")) as client:
+        response = client.post("/tools/exposure", json={
+            "request_id": "unknown", "task_id": "task", "source_id": "source",
+        })
+    assert response.status_code == 501
+
+
+
+def test_executor_rejects_unsigned_and_replayed_edit(policy_demo):
+    from secure_agent.execution.executor import ExecutionDenied
+    from secure_agent.security.permit_verifier import PermitVerificationError
+
+    workspace, policy, executor, key = policy_demo
+    path = workspace / "src/login.py"
+    before = path.read_bytes()
+    call = parse_tool_call({"request_id": "replay-edit", "task_id": "login-task",
+                            "tool": "secure_edit_file",
+                            "arguments": {"path": "src/login.py", "content": "# Signed edit\n"}})
+    with pytest.raises(ExecutionDenied, match="requires a verified permit"):
+        executor.execute(call)
+    assert path.read_bytes() == before
+    permit = PermitIssuer(private_key=key, decision_provider=policy.evaluate).issue(call)
+    executor.execute(call, permit=permit)
+    assert path.read_bytes() == b"# Signed edit\n"
+    path.write_bytes(b"# Do not overwrite\n")
+    with pytest.raises(PermitVerificationError, match="already used"):
+        executor.execute(call, permit=permit)
+    assert path.read_bytes() == b"# Do not overwrite\n"
+
+
+def test_gateway_refuses_permit_signed_by_wrong_key(tmp_path, policy_demo):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    workspace, policy, executor, _ = policy_demo
+    path = workspace / "src/login.py"
+    before = path.read_bytes()
+    with TestClient(create_app(tmp_path / "wrong-key.db", policy_engine=policy,
+                               supervisor=AlignedSupervisor(), demo_executor=executor,
+                               demo_private_key=Ed25519PrivateKey.generate())) as client:
+        response = client.post("/tools/execute", json={
+            "request_id": "wrong-key", "task_id": "login-task", "tool": "secure_edit_file",
+            "arguments": {"path": "src/login.py", "content": "# Denied edit\n"},
+        })
+    assert response.status_code == 403
+    assert path.read_bytes() == before

@@ -6,13 +6,14 @@ from secure_agent.audit.logger import AuditLogger
 from secure_agent.common.schemas import ReadFileToolCall, ToolResult
 from secure_agent.provenance.constructor import ProvenanceGraphConstructor
 from secure_agent.provenance.repository import ProvenanceRepository
+from secure_agent.provenance.models import ExposureReceipt
 
 
 class ProvenanceRecorder:
     """Serialize snapshot updates in one Gateway process.
 
     Delivery to the agent is not proven by an HTTP response being prepared;
-    this recorder intentionally adds no EXPOSED_TO_AGENT edge.
+    exposure is recorded separately after adapter acknowledgement.
     """
 
     def __init__(self, repository: ProvenanceRepository, audit_logger: AuditLogger):
@@ -34,3 +35,25 @@ class ProvenanceRecorder:
             constructor.graph.nodes[result_id]["task_id"] = call.task_id
             self.repository.save_graph(constructor.get_graph())
             self.audit_logger.log_graph_event(call, source_id, result_id)
+
+    def snapshot(self):
+        with self._lock:
+            return self.repository.load_graph()
+
+    def record_exposure(self, receipt: ExposureReceipt) -> None:
+        receipt = ExposureReceipt.model_validate(receipt)
+        with self._lock:
+            constructor = ProvenanceGraphConstructor()
+            constructor.graph = self.repository.load_graph()
+            node_id = f"result:{receipt.request_id}"
+            source_id = f"source:{receipt.source_id}"
+            graph = constructor.graph
+            if (node_id not in graph or source_id not in graph
+                    or graph.nodes[node_id].get("task_id") != receipt.task_id
+                    or not graph.has_edge(node_id, source_id)
+                    or graph.edges[node_id, source_id].get("edge_type") != "DERIVED_FROM"):
+                raise ValueError("Receipt does not match the stored task read result.")
+            agent_id = f"task:{receipt.task_id}"
+            constructor.record_exposure(request_id=receipt.request_id, agent_id=agent_id)
+            self.repository.save_graph(constructor.get_graph())
+            self.audit_logger.log_source_exposure(receipt, agent_id)

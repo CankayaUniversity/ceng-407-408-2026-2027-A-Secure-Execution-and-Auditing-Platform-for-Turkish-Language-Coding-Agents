@@ -444,7 +444,7 @@ These are Day 1 integration requirements. Their implementation must be checked w
 
 The normal tool-result data contract is `ToolResult`. The actual HTTP response envelope, domain-error status mappings, authentication mechanism, and validation-error body must be agreed with the Gateway owner and documented here when integrated. Do not infer them from Registry exceptions.
 
-The current policy implementation reuses `SecurityDecision`; it does not define a separate `PolicyDecision`. `SupervisorDecision` now exists in `secure_agent.security.supervisor`, not in `common.schemas`. `GraphAssessment` and `AuditEvent` were not defined by the inspected modules. Their owners must agree on shared interfaces before consumers depend on them. Audit metadata and event-type validation are not established by these schema tests.
+The current policy implementation reuses `SecurityDecision`; it does not define a separate `PolicyDecision`. `SupervisorDecision` now exists in `secure_agent.security.supervisor`, not in `common.schemas`. `AuditEvent` and `GraphAssessment` are documented in Section 21. The schema tests in this section do not establish their integration behavior.
 
 In an integrated backend, validation and task-context resolution precede policy evaluation. Schema acceptance and registry lookup never grant execution on their own. Authentication, task ownership, policy, supervisor/graph decisions, permit checks, and sandbox controls remain the responsibilities of their respective components.
 
@@ -801,3 +801,247 @@ Implementation files are authoritative for the Python interfaces and project-spe
 - [NIST FIPS 180-4: Secure Hash Standard](https://csrc.nist.gov/pubs/fips/180-4/upd1/final)
 
 Revision `0.2.0` preserves the Day 1 schema fields and registry API, documents the implemented Day 2–4 modules, distinguishes stage verdicts from combined approval, specifies canonical argument hashing and signed UTC timestamps, supplies an interoperability vector, and records dependency/CI and integration requirements. It does not modify source code or add HTTP endpoints.
+
+## 21. Audit, demo Gateway, and provenance
+
+**Model:** `AuditEvent` in `src/secure_agent/common/schemas.py`
+
+The Gateway creates this event after validating a ToolCall. The audit logger and
+repository stores it and looks it up by `request_id`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `event_id` | `NonEmptyText` | Backend-generated event identifier |
+| `request_id` | `NonEmptyText` | Request identifier copied from ToolCall |
+| `event_type` | `NonEmptyText` | Event name; receipt uses `tool_call_received` |
+| `timestamp` | `AwareDatetime` | Backend-generated time; use UTC |
+| `metadata` | `dict[str, JsonValue]` | JSON-compatible event details; receipt stores `task_id` and `tool` |
+
+All fields are required and follow the shared validation rules. The backend generates
+IDs and timestamps; the schema does not check uniqueness or request correlation.
+Use an aware datetime in Python or `AuditEvent.model_validate_json()` for JSON.
+Multiple events may share a request ID.
+
+The receipt event records no authorization or execution result. Its metadata contains
+only `task_id` and `tool` from the validated ToolCall, not arguments or file contents.
+Other stages may use other non-blank event names and JSON metadata. Nested metadata
+is mutable despite the frozen model. Gateway records validated requests before returning HTTP 501; tool execution remains disabled.
+
+### SQLite repository
+
+`AuditRepository(database_path)` in `src/secure_agent/audit/repository.py` creates
+`audit_events` in a SQLite file. The parent directory must exist; `:memory:` is not supported.
+
+- `add(event: AuditEvent) -> None`: validate and commit an event.
+- `get_by_request_id(request_id: str) -> list[AuditEvent]`: return matching events
+  in insertion order, or an empty list.
+
+`event_id` is the primary key; `request_id` has a non-unique index. Timestamps are
+stored as ISO 8601 text with their timezone; metadata is stored as JSON text. Connections close after each operation.
+Duplicate event IDs raise `sqlite3.IntegrityError` without replacing existing events.
+Other SQLite errors propagate to the caller.
+
+
+### Audit logger
+
+`AuditLogger(repository)` in `src/secure_agent/audit/logger.py` provides
+`log_tool_call_received(call: ToolCall) -> AuditEvent`. It revalidates the call,
+generates a UUID event ID and UTC timestamp, copies request_id and places task_id/tool in metadata, and saves
+the event through `AuditRepository.add()`. It returns the saved event and propagates
+storage errors. Each invocation creates a separate event; it does not execute tools.
+
+
+### Gateway audit integration
+
+`create_app(database_path)` initializes audit storage during application startup.
+The default database is `data/audit.db`; override it with `AUDIT_DB_PATH`.
+Docker Compose persists `/app/data` in the `audit_data` volume.
+
+- Valid `POST /tools/execute`: record receipt, then return HTTP 501 (execution disabled).
+- Invalid body: HTTP 422; no receipt event is created.
+- SQLite write failure: HTTP 503; no successful tool result is returned.
+
+Query events using `AuditRepository.get_by_request_id()`; no public lookup endpoint
+is exposed. The agent adapter still treats HTTP 501 as an error. The Day 1 flow
+proves request receipt and persistence, not successful tool execution.
+
+
+### Policy decision audit
+
+`AuditLogger.log_security_decision(call: ToolCall, decision: SecurityDecision)`
+validates both models and saves a `policy_decision` event. Metadata contains
+`task_id`, `tool`, `arguments`, `decision`, and `reason_code`. Edit `content` is
+excluded; other arguments are the validated path or test profile identifier.
+Callers must supply trusted policy decisions and reason codes, not raw user text.
+ALLOW/DENY/REVIEW describe the policy stage, not final execution authorization.
+Storage errors propagate. The method does not evaluate policy or execute tools;
+Gateway policy integration is a separate step.
+
+
+### Optional Gateway policy evaluation
+
+Trusted startup code may pass `policy_engine` to `create_app()`. Valid requests
+then produce receipt and policy decision audit events. DENY/REVIEW returns HTTP
+403; policy failures are recorded as DENY with `POLICY_EVALUATION_ERROR`.
+ALLOW still returns HTTP 501: no executor, permit verification or authentication
+is enabled by this change. Without a configured policy, receipt-only behavior
+remains unchanged. SQLite failures return HTTP 503 before any execution.
+
+
+### Day 2 isolated demo execution
+
+`create_app(database_path, policy_engine=policy, supervisor=supervisor, demo_executor=executor, demo_private_key=signing_key)` enables
+explicit demo execution. A policy is mandatory; a missing Supervisor yields REVIEW. DENY/REVIEW never calls the
+executor. The final ALLOW dispatches the supplied Executor and returns the existing
+ToolResult with `trust_level="untrusted"`. Receipt, decision, and result metadata
+share the request ID. Result output and edit contents are not written to audit.
+SQLite failure before dispatch prevents execution; failure while recording a
+completed result returns 503 but cannot undo a completed operation. Do not retry
+edits automatically.
+
+The demo enforces signed permits as described below. Caller authentication remains a deployment requirement. Only trusted demo
+startup code may supply an executor configured for a disposable workspace inside
+an isolated container. The default `app` has no executor and still returns 501
+for accepted requests. Production execution remains disabled.
+
+`test_agent_gateway_policy_executor_flow` uses a real loopback HTTP server and the
+unchanged SecureToolAdapter. Only the LLM is mocked. A spy observes the real
+Executor, checking allowed reads/edits and zero executor calls on protected-file
+DENY. All files are temporary copies of the sample project.
+
+
+### Day 3 Decision Engine
+
+`DecisionEngine.decide(policy: SecurityDecision, supervisor: SupervisorDecision | None, *, graph: GraphAssessment | None)`
+in `security/decision_engine.py` returns the existing SecurityDecision model.
+SupervisorDecision is imported from the existing `security/supervisor.py`.
+
+| Policy | Supervisor | Result |
+| --- | --- | --- |
+| DENY | Ignored | DENY; preserve policy reason code |
+| REVIEW | Ignored | REVIEW; preserve policy reason code |
+| ALLOW | ALIGNED | Also requires an available GraphAssessment without review flags |
+| ALLOW | MISALIGNED | DENY; preserve Supervisor reason code |
+| ALLOW | UNCERTAIN | REVIEW; preserve Supervisor reason code |
+| ALLOW | Missing | REVIEW; SUPERVISOR_REQUIRED |
+
+Malformed policy or required Supervisor data returns DENY with
+INVALID_POLICY_DECISION or INVALID_SUPERVISOR_DECISION. Existing Supervisor
+client failures (including timeout) yield UNCERTAIN and therefore REVIEW.
+This pure combiner performs no LLM calls, audit writes, timeout enforcement,
+permit issuance, or execution. The Gateway orchestrator short-circuits
+policy DENY/REVIEW and logs stage/final decisions. ALLOW does not replace permits or
+other required security checks. SCHEMA_VERSION remains 0.1.0.
+
+
+### Day 3 Gateway orchestration
+
+`SecurityOrchestrator` in `gateway/orchestrator.py` evaluates Policy, persists its
+verdict, and calls Supervisor only for policy ALLOW. It persists the Supervisor
+verdict and passes policy, Supervisor, and graph assessments to DecisionEngine, then persists the final
+`security_decision` before returning. Policy DENY/REVIEW skips Supervisor.
+`create_app(..., supervisor=supervisor)` supplies the trusted backend instance.
+
+Missing Supervisor, evaluation errors, and provider timeouts do not authorize
+execution. Supervisor client calls must enforce their provider timeout; the
+synchronous orchestrator does not impose a separate hard deadline. HTTP returns
+403 for DENY/REVIEW. A final ALLOW reaches only an explicitly injected demo
+Executor; otherwise it returns 501. No configured policy retains receipt-only
+501 behavior. Audit failures return 503 and prevent downstream dispatch.
+
+Audit event order: `tool_call_received`, `policy_decision`, optional
+`graph_assessment`, `supervisor_decision`, `security_decision`, and (only after demo execution)
+`tool_result`. All share request_id. Supervisor metadata stores verdict and
+reason_code; raw LLM-generated reason text is excluded to avoid logging sensitive
+content. Common schemas and SCHEMA_VERSION remain unchanged.
+
+
+### Day 3 Gateway provenance integration
+
+Explicit demo execution initializes `ProvenanceRecorder` using the existing
+Graph Constructor and Repository. Successful secure_read_file results persist
+SOURCE/TOOL_RESULT nodes and DERIVED_FROM before the HTTP response is returned.
+The graph database sits beside audit storage as `<audit-stem>-provenance.db`.
+A graph_event audit record references the nodes with the same request_id/task_id.
+Source content is hashed by the constructor, never copied to graph or audit.
+Denied, failed, and non-read operations do not create read-source nodes.
+
+EXPOSED_TO_AGENT is not recorded merely because a response was prepared; confirmed
+adapter receipt acknowledgement is implemented in the Day 4 integration below. Snapshot updates use a per-process
+lock; run a single Gateway worker for this prototype. Graph/audit writes are
+separate transactions: failures may leave partial metadata, return 503 and withhold
+read output, rather than claiming a successful fully recorded response.
+
+
+### Day 4 GraphAssessment and Inspector
+
+`GraphAssessment` in `provenance/models.py` has three required immutable fields:
+`risk_flags: frozenset[RiskFlag]`, `source_ids: tuple[NonEmptyText, ...]`, and
+`observed_edges: tuple[ProvenanceEdge, ...]`. JSON uses arrays for these fields.
+`GraphInspector.inspect(call, loaded_graph)` validates existing node/edge models,
+filters by task_id and the prototype's logical agent `task:<task_id>`, and returns
+only evidence for that task. Source IDs are backend source identifiers, not paths.
+
+| Flag | Meaning | Final decision effect |
+| --- | --- | --- |
+| UNTRUSTED_SOURCE_EXPOSURE | A stored result has a matching task-agent receipt edge | Advisory alone; cannot override Policy or Supervisor |
+| SENSITIVE_TARGET_AFTER_UNTRUSTED_INPUT | Current target is .env/.env.* or .git after acknowledged exposure | REVIEW, never an independent grant |
+| GRAPH_INCOMPLETE | Read history has no task binding, no source, or no matching receipt | REVIEW |
+
+A successfully loaded empty graph is valid initial history. Missing/corrupt graph
+is represented by an unavailable assessment (`None`), audited with available=false,
+and cannot produce ALLOW. A graph containing unscoped historical results requires
+review rather than assuming it belongs to the current task. There is no causal
+claim or fabricated PRECEDED_ACTION edge. SOURCE_ACTION_TEMPORAL_LINK is not emitted:
+the current Constructor has no source-to-ToolCall temporal edge model.
+
+The Gateway sequence is Policy -> Graph Inspector -> Supervisor -> Decision Engine.
+Policy DENY/REVIEW skips both later assessments. Only policy ALLOW, Supervisor
+ALIGNED, and a valid graph assessment without review flags can yield final ALLOW.
+The final reason code is POLICY_SUPERVISOR_GRAPH_ALLOWED. Invalid assessment data
+returns DENY; unavailable graph yields REVIEW. GraphAssessment is persisted as a
+graph_assessment audit event under the current request ID. SCHEMA_VERSION remains 0.1.0.
+
+### Demo exposure acknowledgement
+
+`SecureToolAdapter(..., acknowledge_exposure=True)` posts an ExposureReceipt to
+`POST /tools/exposure` only after decoding and correlating a successful read result.
+CLI clients can pass `--acknowledge-exposure`. The feature is opt-in for compatibility
+with older Gateways. A failed acknowledgement is a GatewayError; calls are not retried.
+
+ExposureReceipt requires request_id, task_id, and source_id. The demo-only endpoint
+checks the stored read/source/task binding, records EXPOSED_TO_AGENT and source_exposure
+audit metadata, and returns 204 (409 for mismatch, 503 for storage failure).
+The default Gateway returns 501 for this endpoint. A prepared server response alone
+still does not add exposure. Once a result exists but lacks an acknowledgement,
+subsequent assessment is incomplete and requires review.
+
+This acknowledgement is evidence of receipt at the demo adapter boundary, not
+proof that an LLM consumed it or that a source caused a later action. Agent identity
+is task-scoped for this prototype; multi-agent sessions require a stronger trusted
+identity binding. The endpoint provides no new authentication or permit mechanism.
+Graph snapshot updates remain single-process and graph/audit transactions are separate.
+
+### Day 4 Permit verification and replay prevention
+
+The demo Gateway issues a short-lived permit through the existing `PermitIssuer`
+after the orchestrator records final ALLOW. Issuance is bound to the exact evaluated
+ToolCall. DENY and REVIEW return before issuance. The private signing key is supplied
+by trusted startup code via `demo_private_key`.
+
+Configure `Executor(..., permit_verifier=PermitVerifier(public_key, nonce_database))`.
+`Executor.execute(call, permit=permit)` validates the call, verifies the Ed25519
+signature over `permit_signing_bytes()`, checks task, tool, and canonical argument
+hash, then checks expiry and consumes the nonce before dispatch. Missing or invalid
+permits stop execution. The signed fields follow the existing Permit schema, so
+request_id remains a correlation field rather than a signed binding.
+
+The nonce ledger uses a SQLite primary key and a write transaction to prevent two
+concurrent consumers from using the same permit. Expiry is checked after acquiring
+the write lock. All verifiers for a signing key must share the trusted persistent
+ledger, including across restarts. A consumed permit stays consumed if later scope
+or execution checks fail. Keep the ledger outside the editable workspace.
+
+Tests generate temporary keypairs and use temporary SQLite ledgers. This wiring
+verifies authorization at the demo Executor boundary. Deployment still needs
+trusted key distribution, caller authentication, and separate sandbox isolation.

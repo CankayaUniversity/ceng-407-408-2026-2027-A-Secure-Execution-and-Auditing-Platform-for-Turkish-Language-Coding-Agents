@@ -5,6 +5,7 @@ from uuid import uuid4
 from typing import Literal
 
 from secure_agent.security.supervisor import SupervisorDecision
+from secure_agent.provenance.models import ExposureReceipt, GraphAssessment
 
 from secure_agent.audit.repository import AuditRepository
 from secure_agent.common.schemas import AuditEvent, SecurityDecision, ToolCall, ToolResult, parse_tool_call
@@ -88,6 +89,30 @@ class AuditLogger:
             metadata={"task_id": call.task_id, "tool": call.tool,
                       "source_node_id": source_node_id, "result_node_id": result_node_id,
                       "edge_type": "DERIVED_FROM"},
+        )
+        self.repository.add(event)
+        return event
+
+    def log_graph_assessment(self, call: ToolCall, assessment: GraphAssessment | None) -> AuditEvent:
+        """Unavailable graph is explicit; no source contents are persisted."""
+        call = parse_tool_call(call)
+        metadata = {"task_id": call.task_id, "available": assessment is not None}
+        if assessment is not None:
+            metadata.update(GraphAssessment.model_validate(assessment).model_dump(mode="json"))
+        event = AuditEvent(event_id=str(uuid4()), request_id=call.request_id,
+                           event_type="graph_assessment", timestamp=datetime.now(timezone.utc),
+                           metadata=metadata)
+        self.repository.add(event)
+        return event
+
+    def log_source_exposure(self, receipt: ExposureReceipt, agent_id: str) -> AuditEvent:
+        """Record a validated demo adapter receipt, not source contents."""
+        receipt = ExposureReceipt.model_validate(receipt)
+        event = AuditEvent(
+            event_id=str(uuid4()), request_id=receipt.request_id,
+            event_type="source_exposure", timestamp=datetime.now(timezone.utc),
+            metadata={"task_id": receipt.task_id, "source_id": receipt.source_id,
+                      "agent_id": agent_id},
         )
         self.repository.add(event)
         return event

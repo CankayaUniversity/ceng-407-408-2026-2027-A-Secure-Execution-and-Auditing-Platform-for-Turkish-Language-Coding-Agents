@@ -1,6 +1,7 @@
 """Deterministic combination of policy and supervisor decisions."""
 
 from pydantic import ValidationError
+from secure_agent.provenance.models import GraphAssessment
 
 from secure_agent.common.schemas import SecurityDecision
 from secure_agent.security.supervisor import SupervisorDecision
@@ -15,6 +16,7 @@ class DecisionEngine:
 
     def decide(
         self, policy: SecurityDecision, supervisor: SupervisorDecision | None = None,
+        *, graph: GraphAssessment | None = None,
     ) -> SecurityDecision:
         try:
             policy = SecurityDecision.model_validate(policy)
@@ -30,8 +32,16 @@ class DecisionEngine:
         except ValidationError:
             return SecurityDecision(decision="DENY", reason_code="INVALID_SUPERVISOR_DECISION")
 
-        if supervisor.verdict == "ALIGNED":
-            return SecurityDecision(decision="ALLOW", reason_code="POLICY_AND_SUPERVISOR_ALLOWED")
         if supervisor.verdict == "MISALIGNED":
             return SecurityDecision(decision="DENY", reason_code=supervisor.reason_code)
-        return SecurityDecision(decision="REVIEW", reason_code=supervisor.reason_code)
+        if supervisor.verdict == "UNCERTAIN":
+            return SecurityDecision(decision="REVIEW", reason_code=supervisor.reason_code)
+        if graph is None:
+            return SecurityDecision(decision="REVIEW", reason_code="GRAPH_REQUIRED")
+        try:
+            graph = GraphAssessment.model_validate(graph)
+        except ValidationError:
+            return SecurityDecision(decision="DENY", reason_code="INVALID_GRAPH_ASSESSMENT")
+        if graph.risk_flags & {"GRAPH_INCOMPLETE", "SENSITIVE_TARGET_AFTER_UNTRUSTED_INPUT"}:
+            return SecurityDecision(decision="REVIEW", reason_code="GRAPH_RISK_REVIEW")
+        return SecurityDecision(decision="ALLOW", reason_code="POLICY_SUPERVISOR_GRAPH_ALLOWED")

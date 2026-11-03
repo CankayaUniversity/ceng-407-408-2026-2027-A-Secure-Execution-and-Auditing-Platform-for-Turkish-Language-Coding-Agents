@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from collections.abc import Callable
+from secure_agent.provenance.models import GraphAssessment
 
 from secure_agent.audit.logger import AuditLogger
 from secure_agent.common.schemas import SecurityDecision, ToolCall, parse_tool_call
@@ -15,11 +17,13 @@ if TYPE_CHECKING:
 
 class SecurityOrchestrator:
     def __init__(self, policy: PolicyEngine, supervisor: Supervisor | None,
-                 audit_logger: AuditLogger):
+                 audit_logger: AuditLogger,
+                 graph_provider: Callable[[ToolCall], GraphAssessment] | None = None):
         self.policy = policy
         self.supervisor = supervisor
         self.audit_logger = audit_logger
         self.engine = DecisionEngine()
+        self.graph_provider = graph_provider
 
     def evaluate(self, call: ToolCall) -> SecurityDecision:
         call = parse_tool_call(call)
@@ -29,8 +33,15 @@ class SecurityOrchestrator:
             policy = SecurityDecision(decision="DENY", reason_code="POLICY_EVALUATION_ERROR")
         self.audit_logger.log_security_decision(call, policy)
 
+        graph = None
         assessment = None
         if policy.decision == "ALLOW":
+            if self.graph_provider is not None:
+                try:
+                    graph = GraphAssessment.model_validate(self.graph_provider(call))
+                except Exception:
+                    graph = None
+            self.audit_logger.log_graph_assessment(call, graph)
             if self.supervisor is None:
                 assessment = SupervisorDecision(
                     verdict="UNCERTAIN", reason="Supervisor is not configured.",
@@ -48,6 +59,6 @@ class SecurityOrchestrator:
                     )
             self.audit_logger.log_supervisor_decision(call, assessment)
 
-        decision = self.engine.decide(policy, assessment)
+        decision = self.engine.decide(policy, assessment, graph=graph)
         self.audit_logger.log_security_decision(call, decision, event_type="security_decision")
         return decision

@@ -15,7 +15,7 @@ from secure_agent.execution.test_runner import (
 )
 
 
-def test_authorized_read_edit_and_scope_rejection(tmp_path):
+def test_authorized_read_edit_and_scope_rejection(tmp_path, permit_material):
     """Allow explicitly granted operations and reject other files."""
     (tmp_path / "allowed.txt").write_text("Original", encoding="utf-8")
     (tmp_path / "secret.txt").write_text("Private", encoding="utf-8")
@@ -45,10 +45,15 @@ def test_authorized_read_edit_and_scope_rejection(tmp_path):
         scope_id="scope-demo",
     ))
 
+    _, issuer, verifier = permit_material
     executor = Executor(
+        permit_verifier=verifier,
         registry=registry,
         workspace_roots={"workspace-demo": tmp_path},
     )
+
+    def execute_signed(payload):
+        return executor.execute(payload, permit=issuer.issue(payload))
 
     def call(tool, arguments):
         return {
@@ -58,31 +63,31 @@ def test_authorized_read_edit_and_scope_rejection(tmp_path):
             "arguments": arguments,
         }
 
-    assert executor.execute(
+    assert execute_signed(
         call("secure_read_file", {"path": "allowed.txt"})
     ) == "Original"
 
-    executor.execute(
+    execute_signed(
         call(
             "secure_edit_file",
             {"path": "allowed.txt", "content": "Updated"},
         )
     )
 
-    assert executor.execute(
+    assert execute_signed(
         call("secure_read_file", {"path": "allowed.txt"})
     ) == "Updated"
 
-    assert "allowed.txt" in executor.execute(
+    assert "allowed.txt" in execute_signed(
         call("secure_list_files", {"path": "."})
     )
 
     with pytest.raises(ExecutionDenied):
-        executor.execute(
+        execute_signed(
             call("secure_read_file", {"path": "secret.txt"})
         )
 
-def test_authorized_fixed_profile_dispatch(tmp_path, monkeypatch):
+def test_authorized_fixed_profile_dispatch(tmp_path, monkeypatch, permit_material):
     """Dispatch an authorized test profile without running subprocesses."""
     config_file = tmp_path / "test_profiles.yaml"
     config_file.write_text(
@@ -132,7 +137,9 @@ def test_authorized_fixed_profile_dispatch(tmp_path, monkeypatch):
 
     monkeypatch.setattr(runner, "run", fake_run)
 
+    _, issuer, verifier = permit_material
     executor = Executor(
+        permit_verifier=verifier,
         registry=registry,
         workspace_roots={"workspace-demo": tmp_path},
         test_runners={"workspace-demo": runner},
@@ -145,7 +152,10 @@ def test_authorized_fixed_profile_dispatch(tmp_path, monkeypatch):
         "arguments": {"profile_id": "unit"},
     }
 
-    result = executor.execute(request)
+    def execute_signed(payload):
+        return executor.execute(payload, permit=issuer.issue(payload))
+
+    result = execute_signed(request)
 
     assert result.profile_id == "unit"
     assert result.exit_code == 0
@@ -153,14 +163,14 @@ def test_authorized_fixed_profile_dispatch(tmp_path, monkeypatch):
 
     # Reject unapproved profile identifiers before dispatch.
     with pytest.raises(ExecutionDenied):
-        executor.execute({
+        execute_signed({
             **request,
             "arguments": {"profile_id": "unknown"},
         })
 
     # Reject agent-supplied command fields at the schema boundary.
     with pytest.raises(ValidationError):
-        executor.execute({
+        execute_signed({
             **request,
             "arguments": {
                 "profile_id": "unit",

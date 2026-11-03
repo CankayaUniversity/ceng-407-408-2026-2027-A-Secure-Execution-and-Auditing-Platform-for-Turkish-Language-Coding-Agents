@@ -17,7 +17,7 @@ from secure_agent.tasks.registry import TaskRegistry
 from secure_agent.tasks.scope import TaskScope
 
 
-def test_demo_readme_provenance_flow(tmp_path: Path) -> None:
+def test_demo_readme_provenance_flow(tmp_path: Path, permit_material) -> None:
     """Verify scoped README access and graph persistence end to end."""
 
     # Locate the actual demo project in the repository.
@@ -49,17 +49,20 @@ def test_demo_readme_provenance_flow(tmp_path: Path) -> None:
     )
 
     # Execute a real file read through the Day 2 executor.
+    _, issuer, verifier = permit_material
     executor = Executor(
+        permit_verifier=verifier,
         registry=registry,
         workspace_roots={"workspace-demo": workspace},
     )
 
-    read_output = executor.execute({
+    call = {
         "request_id": "req-readme-demo",
         "task_id": "task-provenance-demo",
         "tool": "secure_read_file",
         "arguments": {"path": "README.md"},
-    })
+    }
+    read_output = executor.execute(call, permit=issuer.issue(call))
 
     assert isinstance(read_output, str)
     assert read_output == (

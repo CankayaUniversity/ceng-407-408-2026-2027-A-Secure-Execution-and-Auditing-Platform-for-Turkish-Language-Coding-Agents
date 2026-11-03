@@ -25,3 +25,20 @@ def tool_call():
         "tool": "secure_read_file",
         "arguments": {"path": "README.md"},
     })
+
+
+@pytest.fixture
+def permit_material(tmp_path):
+    """Ephemeral keys and ledger for execution tests with trusted test approval."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from secure_agent.common.schemas import SecurityDecision
+    from secure_agent.security.permit_issuer import PermitIssuer
+    from secure_agent.security.permit_verifier import PermitVerifier
+
+    key = Ed25519PrivateKey.generate()
+    issuer = PermitIssuer(private_key=key, decision_provider=lambda call: SecurityDecision(
+        decision="ALLOW", reason_code="TEST_ALLOW",
+    ))
+    verifier = PermitVerifier(key.public_key(), tmp_path / "test-nonces.db")
+    return key, issuer, verifier

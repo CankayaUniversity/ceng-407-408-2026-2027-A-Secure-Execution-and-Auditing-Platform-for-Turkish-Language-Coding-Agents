@@ -121,6 +121,8 @@ def main() -> int:
         epilog="Set LLM_API_KEY in the environment if the model service requires a key.",
     )
     parser.add_argument("--gateway-url", help="Send tool calls to this Gateway.")
+    parser.add_argument("--acknowledge-exposure", action="store_true",
+                        help="Acknowledge successful reads to the demo Gateway graph.")
     parser.add_argument("--llm-mode", choices=("mock", "real"), default="mock")
     parser.add_argument("--goal", default="README.md dosyasını oku.")
     parser.add_argument("--task-id", default="task-demo-001")
@@ -143,7 +145,8 @@ def main() -> int:
             ))
         else:
             model = MockLLM()
-        adapter = SecureToolAdapter(args.gateway_url) if args.gateway_url else None
+        adapter = (SecureToolAdapter(args.gateway_url, acknowledge_exposure=args.acknowledge_exposure)
+                   if args.gateway_url else None)
         loop = AgentLoop(model, task_id=args.task_id, max_steps=args.max_steps, adapter=adapter)
         result = loop.run(args.goal)
     except ValueError as error:

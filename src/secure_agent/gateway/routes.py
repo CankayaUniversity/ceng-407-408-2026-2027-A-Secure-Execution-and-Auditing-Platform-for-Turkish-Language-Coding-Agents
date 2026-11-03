@@ -4,7 +4,8 @@ import json
 import sqlite3
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
+from secure_agent.provenance.models import ExposureReceipt
 
 from secure_agent.common.schemas import ReadFileToolCall, ToolCall, ToolResult
 
@@ -51,10 +52,23 @@ def execute_tool(tool_call: ToolCall, request: Request) -> ToolResult:
 
     # Default Gateway has no executor; this branch is for isolated demos only.
     from secure_agent.execution.test_runner import TestRunResult
+    from secure_agent.security.permit_issuer import PermitIssuer, PermitDeniedError
+    from secure_agent.security.permit_verifier import PermitVerificationError
+
+    def authorize(candidate):
+        if candidate != tool_call:
+            raise PermitDeniedError("Permit must match the evaluated call.")
+        return decision
+
+    try:
+        permit = PermitIssuer(private_key=request.app.state.demo_private_key,
+                              decision_provider=authorize).issue(tool_call)
+    except (PermissionError, ValueError, TypeError) as error:
+        raise HTTPException(status_code=403, detail="Permit issuance denied.") from error
 
     result_status = "success"
     try:
-        output = executor.execute(tool_call)
+        output = executor.execute(tool_call, permit=permit)
         if isinstance(output, TestRunResult):
             result_status = "success" if output.exit_code == 0 else "error"
             output = output.output
@@ -62,6 +76,8 @@ def execute_tool(tool_call: ToolCall, request: Request) -> ToolResult:
             output = json.dumps(output, ensure_ascii=False)
         elif output is None:
             output = ""
+    except PermitVerificationError as error:
+        raise HTTPException(status_code=403, detail="Permit verification denied.") from error
     except PermissionError:
         result_status, output = "denied", "Executor denied the operation."
     except Exception:
@@ -79,3 +95,17 @@ def execute_tool(tool_call: ToolCall, request: Request) -> ToolResult:
     except (ValueError, TypeError) as error:
         raise HTTPException(status_code=503, detail="Provenance recording failed.") from error
     return result
+
+
+@router.post("/tools/exposure", status_code=204, response_class=Response)
+def record_exposure(receipt: ExposureReceipt, request: Request) -> Response:
+    """Demo-only receipt acknowledgement, not proof of trust or task ownership."""
+    if request.app.state.demo_executor is None:
+        raise HTTPException(status_code=501, detail="Exposure acknowledgement is demo-only.")
+    try:
+        request.app.state.provenance_recorder.record_exposure(receipt)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail="Receipt does not match a stored read.") from error
+    except sqlite3.Error as error:
+        raise HTTPException(status_code=503, detail="Provenance storage is unavailable.") from error
+    return Response(status_code=204)

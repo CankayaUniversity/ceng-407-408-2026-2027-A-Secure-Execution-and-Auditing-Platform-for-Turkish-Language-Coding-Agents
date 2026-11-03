@@ -38,3 +38,26 @@ class ProvenanceEdge(ContractModel):
     source_node_id: NonEmptyText
     target_node_id: NonEmptyText
     edge_type: EdgeType
+
+
+RiskFlag: TypeAlias = Literal[
+    "UNTRUSTED_SOURCE_EXPOSURE",
+    "SENSITIVE_TARGET_AFTER_UNTRUSTED_INPUT",
+    "GRAPH_INCOMPLETE",
+]
+
+
+class GraphAssessment(ContractModel):
+    """Observed task-scoped evidence, not proof of malicious causation."""
+
+    risk_flags: frozenset[RiskFlag]
+    source_ids: tuple[NonEmptyText, ...]
+    observed_edges: tuple[ProvenanceEdge, ...]
+
+
+class ExposureReceipt(ContractModel):
+    """Demo adapter acknowledgement; never an authorization credential."""
+
+    request_id: NonEmptyText
+    task_id: NonEmptyText
+    source_id: NonEmptyText
