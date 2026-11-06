@@ -5,6 +5,7 @@ MockLLM. Configuration is read only when real mode is explicitly selected.
 The client proposes operations; authorization and execution stay in the Gateway.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from http.client import HTTPException
 import ipaddress
@@ -173,7 +174,7 @@ def _messages(
     return messages
 
 
-def _proposal(body: bytes) -> dict[str, Any] | None:
+def _proposal(body: bytes) -> dict[str, Any] | str:
     """Reject incomplete, refused, parallel, or malformed model responses."""
     try:
         payload = json.loads(body)
@@ -188,7 +189,7 @@ def _proposal(body: bytes) -> dict[str, Any] | None:
         if choice["finish_reason"] == "stop" and calls in (None, []):
             if not isinstance(message.get("content"), str):
                 raise ValueError
-            return None
+            return message["content"]
         if (
             choice["finish_reason"] != "tool_calls"
             or not isinstance(calls, list)
@@ -213,8 +214,9 @@ def _proposal(body: bytes) -> dict[str, Any] | None:
 class LLMClient:
     """Implement ToolCallingModel with no SDK dependency or automatic retries."""
 
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig, *, on_final_text: Callable[[str], None] | None = None):
         self.config = config
+        self.on_final_text = on_final_text
         self.url = config.base_url.rstrip("/") + "/chat/completions"
         self._opener = build_opener(_NoRedirect())
 
@@ -265,4 +267,9 @@ class LLMClient:
             raise LLMError("Cannot encode the LLM request.") from None
         if len(body) > MAX_RESPONSE_BYTES:
             raise LLMError("LLM response exceeds the byte limit.")
-        return _proposal(body)
+        proposal = _proposal(body)
+        if isinstance(proposal, str):
+            if self.on_final_text is not None:
+                self.on_final_text(proposal)
+            return None
+        return proposal

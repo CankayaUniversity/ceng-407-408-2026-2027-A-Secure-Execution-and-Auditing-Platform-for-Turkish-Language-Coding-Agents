@@ -18,7 +18,6 @@ from secure_agent.common.schemas import (
     RunTestsToolCall,
     parse_tool_call,
 )
-from secure_agent.execution.filesystem import WorkspaceFileSystem
 from secure_agent.execution.test_runner import (
     TestRunner,
     TestRunResult,
@@ -34,6 +33,12 @@ class ExecutionDenied(PermissionError):
 class Executor:
     """Dispatch validated tool calls using trusted task permissions."""
 
+    @staticmethod
+    def _open_workspace(root: str | Path):
+        from secure_agent.execution.filesystem import WorkspaceFileSystem
+
+        return WorkspaceFileSystem(root)
+
     def __init__(
         self,
         *,
@@ -48,7 +53,7 @@ class Executor:
 
         # Resolve trusted workspace roots before dispatching operations.
         self._filesystems = {
-            workspace_id: WorkspaceFileSystem(root)
+            workspace_id: self._open_workspace(root)
             for workspace_id, root in workspace_roots.items()
         }
 
