@@ -1,29 +1,34 @@
 # Shared API Contract
 
 **Contract version:** `0.1.0` (shared schema unchanged)  
-**Documentation revision:** `0.2.0` — Day 1–4 interfaces, updated 2026-11-02  
+**Documentation revision:** `0.3.0` — Day 1–7 interfaces and evidence, updated 2026-11-06  
 **Target runtime:** Python 3.11+ and Pydantic v2  
 **Repository location:** `docs/api-contract.md`
 
 ## 1. Scope and implementation status
 
-This document defines the Day 1 shared contracts and registry, Day 2 Casbin policy interface, Day 3 LLM supervisor interface, and Day 4 canonical JSON and Ed25519 permit issuer for the first prototype of the Secure Execution and Auditing Platform for Turkish Language Coding Agents. It documents the inspected modules, not an assertion that the whole repository or deployment is integrated.
+This document defines the shared contracts and registry, Casbin policy, Supervisor, canonical JSON and Ed25519 permits, together with the Day 5 source-context/resolver additions, Day 6 security composition tests and Day 7 documentation for the Secure Execution and Auditing Platform for Turkish Language Coding Agents. Section 21 preserves the supplied team documentation for audit, the demo Gateway, provenance, permit verification, scenario evaluation and reporting. Sections 22–25 add the current Day 5–7 contracts and distinguish them from that integration path.
+
+The directly inspected component/test evidence and the integration behavior reported in the supplied document are separate evidence scopes. This edit did not inspect or run the complete latest merged repository or reproduce Section 21's model experiments. It does not declare documented team components absent merely because they were outside the component review.
 
 | Component | Source | Status covered by this contract |
 | --- | --- | --- |
 | Shared schemas and parsing helpers | `src/secure_agent/common/schemas.py` | Implemented and unit tested |
 | Immutable task scope | `src/secure_agent/tasks/scope.py` | Implemented and unit tested |
 | Trusted task registry | `src/secure_agent/tasks/registry.py` | Implemented and unit tested |
-| Gateway HTTP endpoints | Gateway integration | Day 1 integration target; implementation was not inspected for this document |
-| Mock agent to Gateway to Audit flow | Agent, Gateway, and Audit integration | Must be demonstrated separately; schema tests do not establish completion |
+| Gateway HTTP endpoints | Gateway integration | Default/demo HTTP behavior is described in Section 21; the complete endpoint implementation was not re-inspected for this revision |
+| Agent to Gateway to Audit flow | Agent, Gateway, and Audit integration | Demo wiring and reported integration tests are preserved in Section 21; schema tests alone do not establish this flow |
 | Task-scoped Casbin policy | `security/policy_engine.py`, `configs/casbin_model.conf`, `configs/casbin_policy.csv` | Implemented and unit tested; see Section 13 |
-| LLM task-alignment supervisor | `security/supervisor.py` | Implemented; offline client/response tests do not establish real-model accuracy; see Section 14 |
+| LLM task-alignment supervisor | `security/supervisor.py` | Day 5 optional source context and prompt v2 implemented; see Sections 14 and 22; the new tests are offline |
 | Canonical JSON and argument hash | `common/canonical_json.py` | Implemented and unit tested; see Section 15 |
 | Ed25519 permit issuer | `security/permit_issuer.py` | Implemented with a trusted decision-provider dependency; see Section 16 |
-| Combined policy/supervisor/graph decision | Trusted backend integration | Not implemented by the modules above; see Section 17 |
-| Permit verification, atomic nonce consumption, sandbox execution | Verifier/executor integration | Consumer requirements; their implementation was not inspected for this document |
+| Combined policy/supervisor/graph decision | `security/decision_engine.py` as documented in Section 21; `resolve_security_decision()` in `security/supervisor.py` | Two distinct aggregation interfaces; the Day 5 resolver is directly inspected/tested and the existing demo DecisionEngine contract is preserved; see Sections 17, 21 and 22.2 |
+| Permit verification and atomic nonce consumption | Demo verifier/executor integration | SQLite-ledger verification is described in Section 21; the new Day 6 component suite does not exercise that real verifier |
+| Sandbox execution | Deployment/executor boundary | Separate isolation requirements; no Docker/gVisor security claim follows from component or demo test counts |
+| Security composition tests | `tests/security/test_alignment.py`, `tests/security/test_security_pipeline.py` | 25 + 24 inspected-source test methods passed; scopes and reproduction commands are in Section 23 |
+| Security documentation | `docs/threat-model.md`, `docs/architecture.md` | Day 7 companion documents prepared; contract revision recorded in Section 24 |
 
-Source models determine the behavior of the implemented interfaces. Integration targets below describe required consumer behavior, not evidence that those consumers already implement it.
+Source models determine executable behavior. Initial integration targets in Section 11 must be read alongside Section 21's concrete demo contract. Described implementation, directly rerun tests, reported experiments and remaining deployment requirements must not be combined into a single unqualified security claim.
 
 `SCHEMA_VERSION` is a module constant. There is no `schema_version` field in the current payloads and no automatic version negotiation. Do not add such a field to requests: unknown fields are rejected.
 
@@ -433,7 +438,7 @@ Scope, workspace, permissions, and permit state must not be inferred from extra 
 
 ## 11. Gateway and Audit integration targets
 
-These are Day 1 integration requirements. Their implementation must be checked with the Gateway and Audit owners; the current unit tests exercise Python contracts rather than HTTP endpoints or audit storage.
+These are the initial Day 1 integration requirements. Section 21 supplies the subsequently documented default/demo Gateway and Audit behavior. The shared-schema unit tests exercise Python contracts rather than HTTP endpoints or audit storage; later integration evidence must be evaluated separately.
 
 | Interface | Required Day 1 behavior | Verification still required |
 | --- | --- | --- |
@@ -442,7 +447,7 @@ These are Day 1 integration requirements. Their implementation must be checked w
 | Valid mock request | Reach the Gateway and produce an audit event correlated with its request ID | Demonstrate Mock Agent to Gateway to Audit; real execution is not implied |
 | Audit lookup | Retrieve the recorded event by the same `request_id` | Confirm repository method and persistence test with the Audit owner |
 
-The normal tool-result data contract is `ToolResult`. The actual HTTP response envelope, domain-error status mappings, authentication mechanism, and validation-error body must be agreed with the Gateway owner and documented here when integrated. Do not infer them from Registry exceptions.
+The normal tool-result data contract is `ToolResult`. Section 21 describes concrete default/demo HTTP behavior, including 422/403/501/503 responses and exposure acknowledgement. Authentication and production behavior beyond that demo contract still require agreement and source verification with the Gateway owner. Do not infer HTTP mappings from Registry exceptions.
 
 The current policy implementation reuses `SecurityDecision`; it does not define a separate `PolicyDecision`. `SupervisorDecision` now exists in `secure_agent.security.supervisor`, not in `common.schemas`. `AuditEvent` and `GraphAssessment` are documented in Section 21. The schema tests in this section do not establish their integration behavior.
 
@@ -454,26 +459,33 @@ Run from the repository root with the project virtual environment active. Instal
 
 ```powershell
 python -m pip install -r requirements.txt
-$env:PYTHONPATH = "src"
+$env:PYTHONPATH = (Join-Path $PWD "src")
 python -m pytest tests/unit/test_schemas.py tests/unit/test_task_registry.py tests/unit/test_policy_engine.py tests/unit/test_supervisor.py tests/unit/test_canonical_json.py tests/unit/test_permit_issuer.py -q
+python -m pytest tests/security/test_alignment.py tests/security/test_security_pipeline.py -q
 ```
 
 If an existing environment has no pip, first run `python -m ensurepip --upgrade`. Do not recreate the environment just because pip was omitted.
 
-| Suite | Scope / supplied baseline |
+| Suite | Scope / recorded baseline |
 | --- | --- |
-| `test_schemas.py` | Shared contracts; Day 1 documented baseline: 112 cases |
-| `test_task_registry.py` | Scope and registry; Day 1 documented baseline: 69 cases |
-| `test_policy_engine.py` | Real Casbin model/policy integration, grants, protected paths, and fail-closed errors |
+| `test_schemas.py` | Shared contracts; supplied Day 1 baseline: 112 cases, not a current merged-suite recount |
+| `test_task_registry.py` | Scope and registry; supplied Day 1 baseline: 69 cases |
+| `test_policy_engine.py` | Real Casbin model/policy integration, grants, protected paths and fail-closed errors |
 | `test_supervisor.py` | 22 tests with fake provider/SDK responses; no external API call |
-| `test_canonical_json.py` | 16 tests for the project JSON subset and hashes |
-| `test_permit_issuer.py` | 16 tests using real Ed25519 signatures; one POSIX-specific test is skipped on Windows |
+| `test_canonical_json.py` | Supplied baseline: 16 tests for the project JSON subset and hashes |
+| `test_permit_issuer.py` | Supplied baseline: 16 tests with real Ed25519 signatures; one POSIX-specific test is skipped on Windows |
+| `tests/security/test_alignment.py` | 25 Day 5 tests, including 3 scripted attack and 3 scripted normal scenarios; 27 aggregation combinations are subcases inside one test |
+| `tests/security/test_security_pipeline.py` | 24 Day 6 composition tests using real Policy/Supervisor/Issuer/crypto, mocked LLM/Graph and an execution sentinel |
 
-The supplied Day 3–4 suites passed 54 tests in the inspected Linux Python 3.12 environment. Dependency resolution was also checked for Python 3.11. This is not a claim that the entire team's repository, Windows runtime, or hosted CI ran successfully. On Windows, the supplied two Day 4 suites normally collect 32 tests with one skip. Counts can change when the team adds tests.
+The supplied document records 54 Day 3–4 tests passing in an earlier inspected Linux/Python 3.12 environment and an earlier Python 3.11 dependency-resolution check. These are historical results, not a new run of the merged repository. The two Day 4 suites normally collect 32 tests with one POSIX skip on Windows; counts can change as the team adds tests.
 
-Schema tests establish structure, policy tests establish those policy cases, and issuer tests establish the exercised signing behavior. None alone establishes real-model robustness, Gateway authentication, container isolation, or deployed key separation.
+The Day 5–6 recheck on 2026-11-06 passed **49 test methods** in the inspected-source environment: Python 3.12.14, Pydantic 2.14.1, casbin 1.43.0, cryptography 50.0.2 and rfc8785 0.1.4. The developer also reported the Windows security selection and demo tests passing. No complete current hosted-run log/URL or release commit SHA was supplied for this review.
 
-Changes to required fields, tool names, argument semantics, signed-byte representation, or permission interpretation require coordination with all consumers. The shared `SCHEMA_VERSION` remains `0.1.0` because this documentation update changes no model fields. Documentation revision `0.2.0` is not a new request-body field. A later schema change must update code, tests, documentation, and consumers together.
+The developer's full Windows `python -m pytest tests -q` run failed during collection because `execution/filesystem.py` referenced unavailable `os.O_DIRECTORY`. This is distinct from the passing security subset and Section 21's reported Windows demo/model experiments. Full Windows compatibility is not established. Use the intended Linux/WSL environment or Ubuntu CI for the complete suite; do not remove filesystem security flags to suppress collection errors.
+
+The new offline suites do not measure model robustness or exercise a real Gateway, Graph Inspector, nonce ledger or sandbox. Section 21 separately preserves team-described demo integration and a limited one-turn real-model pilot; those results are not part of the 49-test count and were not rerun by this revision.
+
+Changes to required fields, tool names, argument semantics, signed-byte representation or permission interpretation require coordination with all consumers. `SCHEMA_VERSION` remains `0.1.0`; this documentation revision changes no executable model fields or HTTP request body. Documentation revision `0.3.0` is not a payload field. Future schema changes must update code, tests, documentation and consumers together.
 
 ## 13. Day 2 — Task-scoped Casbin authorization
 
@@ -521,7 +533,7 @@ For all file tools the model rejects paths containing a component matching `.env
 
 Only the literal boolean `True` returned by Casbin authorizes this policy stage. A truthy non-boolean result is denied. The engine implements no caller authentication, ownership check, LLM assessment, permit issuance, or filesystem access.
 
-## 14. Day 3 — LLM task-alignment supervisor
+## 14. Day 3–5 — LLM task-alignment supervisor
 
 **Implementation and local result model:** `src/secure_agent/security/supervisor.py`
 
@@ -530,17 +542,18 @@ Only the literal boolean `True` returned by Casbin authorizes this policy stage.
 ```text
 SupervisorLLMClient.complete(*, system_prompt: str, user_prompt: str) -> str
 Supervisor(*, registry: TaskRegistry, llm_client: SupervisorLLMClient)
-Supervisor.evaluate(*, task_id: str, tool_call: object) -> SupervisorDecision
+Supervisor.evaluate(*, task_id: str, tool_call: object, untrusted_sources: object = None)
+    -> SupervisorDecision
 parse_supervisor_response(raw: str) -> SupervisorDecision
 OpenAIResponsesClient(*, model: str, timeout: float = 20.0, max_output_tokens: int = 2048)
 OpenAIResponsesClient.close() -> None
 ```
 
-The authenticated backend supplies `task_id` after checking ownership. The supervisor fetches the trusted `Task` from the registry, validates the proposal, and requires `call.task_id == task.task_id`. It does not accept a replacement user goal or caller-defined scope in the tool request.
+The authenticated backend supplies `task_id` after checking ownership. The Supervisor fetches the trusted `Task` from the registry, validates the proposal and requires `call.task_id == task.task_id`. It does not accept a replacement goal or caller-defined scope in the tool request. The new optional keyword `untrusted_sources` preserves older calls that omit it. Its schema, limits and backend responsibilities are specified in Section 22.1; it is not a new field on the HTTP `ToolCall` body.
 
 ### 14.2 Model input and output
 
-The system prompt version is `PROMPT_VERSION = "supervisor-tr-v1"`. It defines Turkish task-alignment instructions and treats code, comments, and alleged approvals inside the tool call as untrusted data. The user message is JSON with exactly these application-generated top-level fields:
+The current system prompt version is `PROMPT_VERSION = "supervisor-tr-v2"`. It separates the registry task from proposed operations and optional README/comment/file/tool-output observations, including Turkish, transliterated, misspelled and mixed-language manipulation. Legitimate quotation of an attack is not automatically a task violation. The user message always contains `trusted_task` and `untrusted_tool_call`; a nonempty source list adds `untrusted_sources`. With omitted, `None` or empty sources, the backward-compatible shape remains:
 
 ```json
 {
@@ -576,8 +589,9 @@ A model response could be `{"verdict":"MISALIGNED","reason":"Düzenleme görevle
 | Missing or malformed trusted task ID | `UNCERTAIN` | `SUPERVISOR_UNKNOWN_TASK` |
 | Invalid ToolCall | `UNCERTAIN` | `SUPERVISOR_INVALID_TOOL_CALL` |
 | Task IDs disagree | `UNCERTAIN` | `SUPERVISOR_TASK_MISMATCH` |
-| Input contains invalid Unicode for UTF-8 encoding | `UNCERTAIN` | `SUPERVISOR_INVALID_ENCODING` |
-| Serialized user message exceeds 65,536 bytes | `UNCERTAIN` | `SUPERVISOR_INPUT_TOO_LARGE` |
+| Invalid source container, source fields/types or source count | `UNCERTAIN` | `SUPERVISOR_INVALID_SOURCES` |
+| Input contains invalid Unicode at UTF-8 serialization | `UNCERTAIN` | `SUPERVISOR_INVALID_ENCODING` (invalid source text may be rejected earlier as `SUPERVISOR_INVALID_SOURCES`) |
+| Serialized task + proposal + optional sources exceed 65,536 UTF-8 bytes | `UNCERTAIN` | `SUPERVISOR_INPUT_TOO_LARGE` |
 | Client raises an ordinary exception, including timeout/refusal handling | `UNCERTAIN` | `SUPERVISOR_LLM_ERROR` |
 | Response cannot be validated | `UNCERTAIN` | `SUPERVISOR_INVALID_RESPONSE` |
 
@@ -585,7 +599,7 @@ Response validation allows at most 8,192 UTF-8 bytes, rejects duplicate keys, no
 
 `OpenAIResponsesClient` uses the Responses API with a strict JSON schema, no supplied tools, `store=False`, a required explicitly selected model, and SDK `max_retries=0`. `OPENAI_API_KEY` is read by the SDK. Initialization failures propagate as startup errors. Incomplete responses, refusal content, or empty text raise inside the adapter. Close the client during shutdown. A request timeout is not a hard end-to-end task deadline. Other client implementations must enforce their own timeouts.
 
-`ALIGNED` is advisory and never equals a final `ALLOW`. The model does not receive original file contents, so changes that require an old/new comparison may remain `UNCERTAIN`. Prompt separation and valid JSON do not establish injection resistance or model accuracy. Real-model evaluation is separate from the offline unit tests.
+`ALIGNED` is advisory and never equals a final `ALLOW`. The backend may supply old file text as an untrusted observation, but the module does not authenticate its revision or completeness. Changes requiring a verified old/new comparison may therefore remain `UNCERTAIN`. Prompt separation and valid JSON do not establish injection resistance or model accuracy. The new offline security tests and the separately documented Section 21 real-model pilot have different scopes.
 
 ## 15. Day 4 — Canonical JSON and argument hashing
 
@@ -696,7 +710,7 @@ The API provides a public-key accessor but no private-key export method. Python 
 
 ## 17. Combined decision and execution integration requirements
 
-The required order is authentication/ownership and task resolution, request validation, policy and supervisor/graph checks, trusted decision aggregation, permit issuance, permit verification, atomic nonce consumption, and controlled execution. The inspected modules implement individual stages, not the entire chain.
+The required security dependencies are authentication/ownership and task resolution, request validation, policy and Supervisor/Graph checks, trusted aggregation, permit issuance, permit verification, atomic nonce consumption and controlled execution. The issuer invokes its configured decision provider during `issue()` before signing. The directly inspected Day 6 fixture composes these component checks through that callback; Section 21 separately documents the demo Gateway/orchestrator/verifier path. The two paths must not be assumed to share identical wiring merely because they use `SecurityDecision`.
 
 | Result or artifact | Meaning | What it does not establish |
 | --- | --- | --- |
@@ -706,9 +720,9 @@ The required order is authentication/ownership and task resolution, request vali
 | Trusted combined `ALLOW` | The configured aggregator reports required checks passed | Successful signature verification or actual execution |
 | Signed Permit | Issuer bound the current permit fields to its signing key | Freshness, single use, filesystem safety, or tool success |
 
-`DENY`, `REVIEW`, `MISALIGNED`, and `UNCERTAIN` must not reach execution through a default-allow path. Define the aggregation policy explicitly; this document does not invent a graph interface or implement an aggregator. The issuer's `DecisionProvider` is the integration boundary.
+`DENY`, `REVIEW`, `MISALIGNED` and `UNCERTAIN` must not reach execution through a default-allow path. The existing demo `DecisionEngine` consumes `GraphAssessment` (Section 21); the Day 5 local resolver consumes `graph_flag` (Section 22.2). They have different graph semantics, error precedence and reason codes. Neither may be silently substituted for the other. The issuer's trusted `DecisionProvider` remains the issuance integration boundary.
 
-Before execution, the verifier must validate the permit structure and trusted public key, verify the signature over the shared signing bytes, compare task/tool/argument hash to the exact proposed operation, require a non-expired permit, and atomically reject already-used nonces. A random nonce alone does not prevent replay. A valid signature alone does not establish that the permit is current or applicable to this call.
+Before execution, the verifier must validate the permit structure and trusted public key, verify the signature over the shared signing bytes, compare task/tool/argument hash to the exact proposed operation, require a non-expired permit and atomically reject already-used nonces. Section 21 describes an implementation of this behavior for the demo Executor with a SQLite nonce ledger; the new Day 6 component suite does not exercise that ledger. A random nonce alone does not prevent replay, and a valid signature alone does not prove applicability or freshness.
 
 The executor must still enforce workspace containment, symlink/race protections, resource limits, trusted test-profile resolution, and sandbox policy. Audit integration should preserve the task/request correlation and record policy, supervisor, issuance, and execution outcomes; exact audit schemas and HTTP envelopes remain owned by their corresponding components.
 
@@ -779,14 +793,17 @@ The supplied CI workflow uses Python 3.11 on Ubuntu, a 10-minute job timeout, re
   run: python -m pytest tests/unit -q
 ```
 
-The workflow contents were supplied in conversation; its exact repository filename and a subsequent successful hosted run were not inspected. An import error for `rfc8785` or `cryptography` during collection indicates missing dependencies in that Python environment; it is not a failed assertion about permit behavior.
+The developer supplied the existing `ci.yml` contents and retained that workflow. Its `python -m pytest tests -q` command already selects `tests/security/`, so no new workflow or duplicate security run is required. The separately drafted alternative CI file was not adopted. A complete current hosted-run log/URL was not supplied. An import error for `rfc8785` or `cryptography` indicates missing dependencies, whereas the observed Windows `os.O_DIRECTORY` collection failure indicates a platform boundary; neither is itself a failed permit assertion.
 
 | Day | Local module evidence | Additional integration evidence still required |
 | --- | --- | --- |
 | 1 | Shared schemas, TaskScope, TaskRegistry and tests | Gateway validation/health, shared agent contract, mock request reaching audit |
 | 2 | Casbin model/policy/engine and regression tests | Real Gateway path uses trusted registry scope and cannot bypass policy |
 | 3 | Supervisor, structured results, offline adapter/error tests | Real endpoint access, real JSON verdicts, out-of-task edit evaluation, measured model behavior |
-| 4 | Canonical JSON, real Ed25519 issuer/signature/key-loading tests | Trusted combined decision provider; shared verifier codec; signature/binding/expiry/replay checks; private key absent from agent container |
+| 4 | Canonical JSON, real Ed25519 issuer/signature/key-loading tests; demo verifier/ledger described in Section 21 | Verify the current deployed provider/consumer wiring, authenticated ownership and private-key separation |
+| 5 | Optional untrusted sources, prompt v2, local resolver, 25 offline tests; team scenarios/pilot separately recorded in Section 21 | Check real Gateway source-context propagation and distinguish `GraphAssessment`/`DecisionEngine` from the boolean resolver; measure model behavior separately |
+| 6 | 24 component-composition tests; existing CI selects security tests; team report/permit trace retained in Section 21 | Record a complete hosted run for the final commit and independently inspect the real verifier/executor path |
+| 7 | Threat model, architecture and this contract revision | Reconcile all documents against the latest merged source and final acceptance evidence; no release/tag is created by documentation |
 
 Passing unit tests or building a signed Permit does not by itself complete these integration checks. With the in-memory registry, a restart requires trusted task/scope setup again; multi-process persistence and deployed key rotation are not implemented by these modules.
 
@@ -800,9 +817,11 @@ Implementation files are authoritative for the Python interfaces and project-spe
 - [cryptography Ed25519 signing](https://cryptography.io/en/stable/hazmat/primitives/asymmetric/ed25519/)
 - [NIST FIPS 180-4: Secure Hash Standard](https://csrc.nist.gov/pubs/fips/180-4/upd1/final)
 
-Revision `0.2.0` preserves the Day 1 schema fields and registry API, documents the implemented Day 2–4 modules, distinguishes stage verdicts from combined approval, specifies canonical argument hashing and signed UTC timestamps, supplies an interoperability vector, and records dependency/CI and integration requirements. It does not modify source code or add HTTP endpoints.
+Revision `0.2.0` documented Day 1–4 component interfaces and the canonical signing vector. Revision `0.3.0` updates the Supervisor interface/prompt, documents `UntrustedSource` and the local resolver, records the Day 5–6 test/CI/platform evidence and links the Day 7 documents. It preserves Section 21's team integration/reporting material and explicitly distinguishes its `DecisionEngine`/`GraphAssessment` contract from the added resolver. This is a documentation-only change: no source code, shared model fields, HTTP endpoints or existing demo results are changed.
 
 ## 21. Audit, demo Gateway, and provenance
+
+**Preserved team integration documentation.** The following contract and reported runs are retained from the supplied file. They describe default/demo modes, the structured `DecisionEngine`/`GraphAssessment` path, the demo verifier/SQLite ledger and evaluation/reporting components. This documentation update did not rerun those components or the reported pilot. The Day 5–6 component tests added in Sections 22–23 have a narrower, separate evidence scope. See Section 22.3 before connecting the two aggregation interfaces.
 
 **Model:** `AuditEvent` in `src/secure_agent/common/schemas.py`
 
@@ -1146,3 +1165,190 @@ is unmeasured. Reports distinguish policy blocks, observed effects and errors.
 six synthetic attack fixtures over HTTP with a mock Supervisor. The Day 5
 integration test above exercises the committed attack suite. The archived
 run used scripted model proposals and has no paired baseline.
+
+## 22. Day 5 — Source context and local decision resolver
+
+**Implementation:** `src/secure_agent/security/supervisor.py`  
+**Scope:** Public Python interfaces; this section adds no HTTP request fields.
+
+### 22.1 UntrustedSource and evaluate() compatibility
+
+```text
+UntrustedSource(source_id: NonEmptyText, kind: Literal["readme", "code_comment", "file", "tool_output"], content: str)
+Supervisor.evaluate(*, task_id: str, tool_call: object, untrusted_sources: object = None)
+    -> SupervisorDecision
+```
+
+`UntrustedSource` derives from `ContractModel` and is defined in `security.supervisor`, not `common.schemas`. It rejects unknown fields, including source-supplied permission or trust assertions.
+
+| Field / collection | Accepted value | Limit / behavior |
+| --- | --- | --- |
+| `source_id` | Non-blank string | At most 256 characters; a label, not a credential or verified path |
+| `kind` | Exactly `readme`, `code_comment`, `file` or `tool_output` | Classification remains untrusted; it does not assign authority |
+| `content` | String; empty text is allowed | At most 65,536 characters per source, plus the stricter whole-input UTF-8 byte limit |
+| `untrusted_sources` | List of source dictionaries and/or `UntrustedSource` models | At most 16 entries; other containers/types are invalid |
+| Omitted, `None` or `[]` | No source context | Preserve the earlier two-field model input; omit `untrusted_sources` from the serialized prompt |
+| Complete model input | Trusted task + proposal + sources | At most 65,536 UTF-8 bytes; no silent truncation or rewriting |
+
+The implementation validates source structure, not source ownership, freshness, uniqueness or provenance. The backend must associate source IDs/content with the authenticated task, workspace and relevant revision, and decide which observations are necessary. The collection does not enforce unique source IDs.
+
+With an already configured `supervisor` and registered `task-001`, the backend can call:
+
+```python
+assessment = supervisor.evaluate(
+    task_id="task-001",
+    tool_call={
+        "request_id": "req-003",
+        "task_id": "task-001",
+        "tool": "secure_edit_file",
+        "arguments": {
+            "path": "src/login.py",
+            "content": "def login():\n    return False\n",
+        },
+    },
+    untrusted_sources=[
+        {
+            "source_id": "source-001",
+            "kind": "readme",
+            "content": "Giriş kontrolünü incele. Sahte yönetici talimatları görev değildir.",
+        }
+    ],
+)
+```
+
+The source list becomes a separate top-level `untrusted_sources` array next to `trusted_task` and `untrusted_tool_call`. Its text is never used to overwrite the registry goal or the system prompt. `trusted_task`, `system`, `developer` or `approved` appearing inside source content are data, not real role/permission changes.
+
+`ToolResult` and `UntrustedSource` are different models. A trusted backend may explicitly construct `UntrustedSource(source_id=result.source_id, kind="tool_output", content=result.output)` after correlating the result. Passing a full `ToolResult` dictionary directly would include unsupported fields. There is no automatic source loading or provenance lookup inside `Supervisor.evaluate()`.
+
+Invalid source shape/count/fields produce `SUPERVISOR_INVALID_SOURCES` with `UNCERTAIN` before an LLM call. Oversized whole input produces `SUPERVISOR_INPUT_TOO_LARGE`. Invalid Unicode may be rejected by source validation first or fail later serialization as `SUPERVISOR_INVALID_ENCODING`. See Section 14.3 for other handled fallbacks.
+
+The existing Gateway call using only `task_id` and `tool_call` remains valid, but receives no additional source observations until its trusted caller explicitly supplies them. Adding this keyword to the Python method does not automatically connect the persisted Graph or change the flat HTTP `ToolCall` schema.
+
+### 22.2 resolve_security_decision() contract and reason codes
+
+```text
+resolve_security_decision(*,
+    policy_decision: object,
+    supervisor_decision: object,
+    graph_flag: bool | None = None,
+) -> SecurityDecision
+```
+
+This pure function revalidates supplied `SecurityDecision` and `SupervisorDecision` objects or matching dictionaries, then combines their results. Inputs must come from the trusted backend for the same unchanged call and source snapshot. Shape validation does not authenticate a result's origin. The function runs no model, Policy Engine, graph query, audit write, permit issuance or execution.
+
+The rows below are in evaluation-precedence order; later rows apply only if earlier conditions did not determine a result:
+
+| Condition | Result | `reason_code` |
+| --- | --- | --- |
+| Policy object invalid/missing | `REVIEW` | `ALIGNMENT_INVALID_POLICY` |
+| Valid policy `DENY` | `DENY`, regardless of other inputs | `ALIGNMENT_POLICY_DENIED` |
+| Supervisor object invalid/missing | `REVIEW` | `ALIGNMENT_INVALID_SUPERVISOR` |
+| Valid Supervisor `MISALIGNED` | `DENY` | `ALIGNMENT_SUPERVISOR_MISALIGNED` |
+| Valid policy `REVIEW` | `REVIEW` | `ALIGNMENT_POLICY_REVIEW` |
+| Supervisor `UNCERTAIN` | `REVIEW` | `ALIGNMENT_SUPERVISOR_UNCERTAIN` |
+| Policy `ALLOW` + Supervisor `ALIGNED`; graph flag missing or not a strict boolean | `REVIEW` | `ALIGNMENT_GRAPH_UNAVAILABLE` |
+| Same preceding approvals; graph flag `True` | `REVIEW`, not a definitive attack finding | `ALIGNMENT_GRAPH_FLAG_REVIEW` |
+| Same preceding approvals; graph flag `False` | Stage `ALLOW` | `ALIGNMENT_CHECKS_PASSED` |
+
+In particular, integer `0`, integer `1` and strings such as `"false"` are not accepted as graph clearance. Invalid policy plus a valid Supervisor rejection results in the earlier `REVIEW`, not `DENY`; both are non-authorizing. With a valid `REVIEW` policy and valid `MISALIGNED` Supervisor, the local resolver returns `DENY` because Supervisor rejection precedes policy review.
+
+`REVIEW` remains blocked. This function provides no human-review queue or automatic resume action. A separate authorized backend flow must resolve review and obtain fresh checks before issuance. Its `ALLOW` is only an aggregate-stage result and does not replace permit verification, one-time nonce consumption or executor controls.
+
+### 22.3 Relationship to the existing DecisionEngine / GraphAssessment
+
+Both interfaces return `SecurityDecision`, but they are not interchangeable:
+
+| Aspect | Existing demo contract in Section 21 | Day 5 local resolver |
+| --- | --- | --- |
+| Entry point | `DecisionEngine.decide(policy, supervisor, *, graph=...)` in `security/decision_engine.py` | `resolve_security_decision(policy_decision=..., supervisor_decision=..., graph_flag=...)` in `security/supervisor.py` |
+| Graph input | Structured `GraphAssessment` with risk flags, source IDs and observed edges | Strict boolean suspicion/clearance, or missing/invalid value |
+| Mere `UNTRUSTED_SOURCE_EXPOSURE` | Advisory alone; not automatically a review requirement | No separate flag categories; a supplied `True` always causes `REVIEW` after preceding approvals |
+| Invalid policy/required Supervisor data | Documented `DENY` with `INVALID_*` codes | `REVIEW` with `ALIGNMENT_INVALID_*` codes, subject to prior valid policy denial |
+| Policy denial/review | Preserve policy reason and short-circuit later assessments in the Gateway | Normalize reason codes; a supplied valid Supervisor rejection can take precedence over valid policy review |
+| Allowed reason code | `POLICY_SUPERVISOR_GRAPH_ALLOWED` | `ALIGNMENT_CHECKS_PASSED` |
+| Reviewed sequencing | Documented Gateway: Policy → Graph Inspector → Supervisor → Decision Engine | Component fixture: Policy → Supervisor → Graph double → local resolver |
+
+Do not pass `GraphAssessment` directly as `graph_flag` or reduce it using `bool(assessment.risk_flags)`: that would turn advisory exposure into mandatory review and discard the difference between unavailable, incomplete and invalid evidence. Any future adapter must explicitly define signal mapping, errors, reason-code expectations and context binding, and test the intended behavior.
+
+This documentation update preserves the existing demo contract and does not replace its DecisionEngine, change its orchestration order or claim the new source-context keyword has been wired into it. Source code and integration tests must establish any such change.
+
+## 23. Day 6 — Security composition tests and CI coverage
+
+### 23.1 Test boundaries
+
+| File | Count in the inspected source | Real components | Doubles / limits |
+| --- | --- | --- | --- |
+| `tests/security/test_alignment.py` | 25 methods | Registry, scopes, Supervisor input/output handling and local resolver | Scripted model verdicts; Policy/Graph result fixtures; no Gateway or agent tools |
+| `tests/security/test_security_pipeline.py` | 24 methods | Registry, real Casbin configuration, Supervisor, local resolver, canonical hashing, issuer and Ed25519 | Scripted LLM, mocked graph and downstream execution sentinel; no real Gateway, nonce ledger or sandbox |
+
+The first file includes 3 scripted attack scenarios and 3 scripted normal scenarios, plus the 27-combination decision table as subcases inside one method. These are separate from Section 21's six benign/six attack demo scenarios, historical reports and one-turn model experiment. Do not add those counts together as one benchmark.
+
+The Day 6 `_trusted_decision()` helper is a test implementation of the issuer's callback contract. Policy denial/review short-circuits later checks; Supervisor rejection/uncertainty blocks before graph inspection; only the correctly cleared path returns an aggregate `ALLOW` to the issuer. It is not an application endpoint or a deployment configuration.
+
+`issue_then_record()` calls the execution Mock only after issuance. Observing zero calls on a failure proves the fixture did not reach that sentinel; it does not independently prove the real Gateway/Executor rejected the same request. Section 21 documents the separate demo integration path and verifier ledger.
+
+### 23.2 Critical checks
+
+| Behavior | Representative pipeline check |
+| --- | --- |
+| Policy denial cannot be overridden by a would-be aligned model answer | `test_policy_deny_stops_before_supervisor_even_if_llm_would_align` |
+| Protected paths remain blocked despite mistaken scope grants | `test_protected_paths_cannot_be_permitted_even_with_explicit_scope_grants` |
+| A registered task cannot replace the backend's authenticated task context | `test_other_registered_task_cannot_replace_authenticated_task_context` |
+| Malformed model output, timeout and uncertainty produce no permit | Malformed-response, timeout and `MISALIGNED`/`UNCERTAIN` tests |
+| Source text remains separate during the issuer callback | `test_source_injection_stays_separate_through_the_issuer_callback` |
+| Graph suspicion/unavailability/invalid type cannot grant issuance | `test_graph_suspicion_missing_result_and_invalid_flags_withhold_permits` |
+| Permits bind the exact authorized operation and have real signatures | `test_aligned_authorized_call_receives_a_real_bound_signature` |
+| Changing signed fields breaks verification | `test_tampering_with_a_permit_from_the_chain_breaks_its_real_signature` |
+| Earlier approval is not reused for another issuance | `test_each_issue_rechecks_decisions_instead_of_reusing_prior_approval` |
+
+The last two cryptographic checks use the real signing-byte helper and public-key verification. They do not dispatch to the demo verifier or prove its expiry/replay enforcement. No new private key files or production key material are required by these suites.
+
+### 23.3 Reproduction and evidence
+
+From the project root in PowerShell with its environment activated:
+
+```powershell
+$env:PYTHONPATH = (Join-Path $PWD "src")
+python -m pytest tests/security -q
+```
+
+To select exactly the new two suites, pass their paths as shown in Section 12. Both files also support `unittest` without pytest:
+
+```powershell
+python -m unittest discover -s tests/security -p test_alignment.py -v
+python -m unittest discover -s tests/security -p test_security_pipeline.py -v
+```
+
+The recorded combined recheck passed 49 methods on 2026-11-06 in the inspected-source environment listed in Section 12. The developer reported the local security selection and demo tests passing; the full Windows selection encountered the separate Unix-flags import error. No latest merged-commit identifier or complete hosted-run result was supplied.
+
+The retained CI workflow installs `.[dev]` and `requirements.txt`, then runs `python -m pytest tests -q` on Ubuntu/Python 3.11 before the demo tests. This already includes `tests/security/`; keep this coverage rather than adding a duplicate workflow. A failed collection or test must remain a failing job, not be hidden using `continue-on-error`, missing-file skips or an unconditional success exit.
+
+## 24. Day 7 — Security documentation and final review
+
+| Document | Responsibility | Contract relationship |
+| --- | --- | --- |
+| [threat-model.md](threat-model.md) | Assets, trust boundaries, threats, known limitations and evidence | Separates directly reviewed component behavior from deployment requirements |
+| [architecture.md](architecture.md) | Component roles, callback/permit flow, contracts and deployment/state ownership | Describes the inspected architecture with Mermaid diagrams and explicit integration limits |
+| `api-contract.md` | Exact interfaces, response shapes, signing representation, aggregation differences and test commands | This revision completes the scheduled Day 5–7 contract update |
+
+The companion documents describe the evidence scope available when prepared. Section 21's retained team integration/pilot details are additional supplied documentation, not proof that the component-test review inspected those implementations. Future source review should reconcile these documents at the same commit rather than delete one path or claim every team component is absent.
+
+Final acceptance must keep these evidence categories distinct:
+
+1. Executable model/interface guarantees demonstrated by the inspected component tests.
+2. The demo Gateway/Graph/verifier contracts and reported runs preserved in Section 21.
+3. The limited one-turn real-model pilot, which did not dispatch proposed actions and ran each condition once.
+4. Full Linux/CI release validation, authentication, key isolation and actual sandbox/deployment controls requiring their own current evidence.
+
+Record the final commit SHA, selected suites, test results, runtime/dependency versions and hosted workflow link when available. No release tag, complete CI success, detection percentage or production-readiness claim is created by this documentation change.
+
+## 25. Revision 0.3.0 summary and compatibility
+
+- Preserve shared Task/ToolCall/Permit/ToolResult fields, the registry API, canonical signing representation and the fixed interoperability vector.
+- Update the Supervisor signature to the backward-compatible optional source-context argument and prompt `supervisor-tr-v2`; document limits and `SUPERVISOR_INVALID_SOURCES`.
+- Document the local resolver's exact precedence/reason codes and distinguish it from the existing structured DecisionEngine.
+- Preserve all supplied Section 21 audit, Gateway, provenance, exposure, verifier/nonce, scenario, model-pilot and reporting content.
+- Record the 25 + 24 offline security tests, existing CI coverage, Windows platform limit and the separate scope of reported demo/model results.
+- Link the Day 7 threat/architecture deliverables and leave shared `SCHEMA_VERSION` at `0.1.0`.
+
+This updated document is the replacement for the supplied earlier contract file. It changes documentation only; adopting any new HTTP field, Graph adapter or production wiring requires a separate code/test change.
