@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import re
 
-from secure_agent.common.schemas import ToolResult
+from secure_agent.common.schemas import DEFAULT_MAX_OUTPUT_BYTES, ToolResult
 
 
-DEFAULT_MAX_OUTPUT_BYTES = 32 * 1024
 REDACTED = "[REDACTED]"
 TRUNCATION_MARKER = "\n[TRUNCATED]"
 

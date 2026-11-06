@@ -31,6 +31,7 @@ from pydantic import (
 
 
 SCHEMA_VERSION = "0.1.0"
+DEFAULT_MAX_OUTPUT_BYTES = 32 * 1024
 
 
 def _non_blank(value: str) -> str:

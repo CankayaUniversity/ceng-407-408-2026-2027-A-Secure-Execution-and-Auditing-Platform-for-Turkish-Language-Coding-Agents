@@ -1,16 +1,35 @@
 
 
+from http.client import IncompleteRead
 from io import BytesIO
 import json
+from types import SimpleNamespace
 from urllib.error import HTTPError, URLError
 
 import pytest
 from pydantic import ValidationError
 
 from agent.agent_loop import AgentLoop, MockLLM
-from agent.tool_adapter import GatewayError, SecureToolAdapter
+from agent.tool_adapter import GatewayError, MAX_RESPONSE_BYTES, SecureToolAdapter
 from agent.tools import UnsupportedToolError, get_tool_schemas, make_tool_call
 from secure_agent.common.schemas import ReadFileToolCall, parse_tool_call_json
+from secure_agent.security.result_protection import DEFAULT_MAX_OUTPUT_BYTES
+
+
+class GatewayResponse(BytesIO):
+    status = 200
+
+    def __init__(self, body):
+        super().__init__(body)
+        self.length = len(body)
+
+
+@pytest.fixture
+def gateway_transport(monkeypatch):
+    def install(open_request):
+        monkeypatch.setattr("agent.tool_adapter.build_opener",
+                            lambda handler: SimpleNamespace(open=open_request))
+    return install
 
 
 def test_mock_agent_generates_a_shared_read_file_tool_call():
@@ -151,14 +170,14 @@ def test_model_receives_goal_schemas_and_history_and_runs_start_fresh():
 
 
 @pytest.fixture
-def gateway_response(monkeypatch):
+def gateway_response(gateway_transport):
     """Capture HTTP requests and return the shared Gateway result contract."""
     requests = []
 
     def respond(request, *, timeout):
         payload = json.loads(request.data)
         requests.append((request, payload, timeout))
-        return BytesIO(json.dumps({
+        return GatewayResponse(json.dumps({
             "request_id": payload["request_id"],
             "status": "success",
             "output": "Gateway sonucu: çalışma",
@@ -166,7 +185,7 @@ def gateway_response(monkeypatch):
             "trust_level": "untrusted",
         }, ensure_ascii=False).encode("utf-8"))
 
-    monkeypatch.setattr("agent.tool_adapter.urlopen", respond)
+    gateway_transport(respond)
     return requests
 
 
@@ -222,18 +241,19 @@ def test_gateway_results_reach_model_and_runs_start_fresh(gateway_response):
     (URLError(TimeoutError()), "timed out"),
     (URLError("Connection refused"), "connection failed"),
     (ConnectionResetError(), "connection failed"),
+    (IncompleteRead(b"partial"), "connection failed"),
     (HTTPError("http://gateway/tools/execute", 422, "Invalid", {}, None), "HTTP 422"),
     (HTTPError("http://gateway/tools/execute", 501, "Unavailable", {}, None), "HTTP 501"),
     (HTTPError("http://gateway/tools/execute", 503, "Unavailable", {}, None), "HTTP 503"),
 ])
-def test_gateway_failure_stops_agent_without_retry(monkeypatch, failure, expected):
+def test_gateway_failure_stops_agent_without_retry(gateway_transport, failure, expected):
     attempts = []
 
     def fail(request, *, timeout):
         attempts.append(request)
         raise failure
 
-    monkeypatch.setattr("agent.tool_adapter.urlopen", fail)
+    gateway_transport(fail)
     model = RepeatingModel()
     result = AgentLoop(model, task_id="task-001", adapter=SecureToolAdapter()).run(
         "Dosyayı oku."
@@ -253,10 +273,8 @@ def test_gateway_failure_stops_agent_without_retry(monkeypatch, failure, expecte
         "source_id": "source-001", "trust_level": "untrusted",
     }).encode(),
 ])
-def test_invalid_gateway_response_is_handled_by_agent(monkeypatch, body):
-    monkeypatch.setattr(
-        "agent.tool_adapter.urlopen", lambda request, timeout: BytesIO(body)
-    )
+def test_invalid_gateway_response_is_handled_by_agent(gateway_transport, body):
+    gateway_transport(lambda request, timeout: GatewayResponse(body))
     result = AgentLoop(MockLLM(), task_id="task-001", adapter=SecureToolAdapter()).run(
         "Dosyayı oku."
     )
@@ -265,11 +283,11 @@ def test_invalid_gateway_response_is_handled_by_agent(monkeypatch, body):
     assert result.tool_results == ()
 
 
-def test_http_error_preserves_status_code(monkeypatch):
+def test_http_error_preserves_status_code(gateway_transport):
     def fail(request, *, timeout):
         raise HTTPError(request.full_url, 501, "Unavailable", {}, None)
 
-    monkeypatch.setattr("agent.tool_adapter.urlopen", fail)
+    gateway_transport(fail)
     call = make_tool_call(
         {"tool": "secure_read_file", "arguments": {"path": "README.md"}},
         task_id="task-001",
@@ -277,3 +295,49 @@ def test_http_error_preserves_status_code(monkeypatch):
     with pytest.raises(GatewayError) as caught:
         SecureToolAdapter().execute(call)
     assert caught.value.status_code == 501
+
+
+def test_schema_cache_is_isolated_between_model_turns():
+    schemas = get_tool_schemas()
+    schemas[0]["function"]["parameters"]["required"].clear()
+    assert get_tool_schemas()[0]["function"]["parameters"]["required"] == ["path"]
+
+
+@pytest.mark.parametrize("url", [
+    "file:///tmp/data", "ftp://example.org", "http:///missing-host",
+    "http://user:password@gateway", "https://gateway:bad",
+    "https://gateway/path?override=1", "https://gateway/#fragment",
+])
+def test_invalid_gateway_endpoint_is_rejected(url):
+    with pytest.raises(ValueError, match="Gateway"):
+        SecureToolAdapter(url)
+
+
+@pytest.mark.parametrize("fault", ["oversized_wire", "oversized_output", "short_body", "partial_status"])
+def test_invalid_delivery_stops_before_exposure(gateway_transport, fault):
+    requests = []
+
+    def respond(request, *, timeout):
+        requests.append(request.full_url)
+        result = {
+            "request_id": json.loads(request.data)["request_id"], "source_id": "source",
+            "status": "success", "trust_level": "untrusted", "output": "OK",
+        }
+        if fault == "oversized_output":
+            result["output"] = "ğ" * (DEFAULT_MAX_OUTPUT_BYTES // 2 + 1)
+        body = json.dumps(result).encode()
+        if fault == "oversized_wire":
+            body += b" " * MAX_RESPONSE_BYTES
+        response = GatewayResponse(body)
+        if fault == "short_body":
+            response.length += 1
+        if fault == "partial_status":
+            response.status = 206
+        return response
+
+    gateway_transport(respond)
+    adapter = SecureToolAdapter(acknowledge_exposure=True)
+    run = AgentLoop(MockLLM(), task_id="day6", adapter=adapter).run("Dosyayı oku.")
+    assert requests == [adapter.url]
+    assert run.stop_reason == "gateway_error" and run.steps == 1
+    assert run.tool_results == ()

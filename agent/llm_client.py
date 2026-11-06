@@ -15,10 +15,11 @@ import os
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import Request, build_opener
 
 from secure_agent.common.schemas import ToolCall, ToolResult
 
+from .http_transport import RejectRedirects
 from .tools import validate_tool_proposal
 
 
@@ -124,13 +125,6 @@ class LLMConfig:
         )
 
 
-class _NoRedirect(HTTPRedirectHandler):
-    """Never forward the configured Authorization header to another location."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
 def _messages(
     user_goal: str,
     history: tuple[ToolCall, ...],
@@ -218,7 +212,7 @@ class LLMClient:
         self.config = config
         self.on_final_text = on_final_text
         self.url = config.base_url.rstrip("/") + "/chat/completions"
-        self._opener = build_opener(_NoRedirect())
+        self._opener = build_opener(RejectRedirects())
 
     def propose(
         self,

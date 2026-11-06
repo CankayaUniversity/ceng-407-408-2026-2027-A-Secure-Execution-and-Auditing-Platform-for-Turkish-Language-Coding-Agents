@@ -1,13 +1,23 @@
 """Send secure tool calls to the Gateway without accessing local files."""
 
+from http.client import HTTPException
 import math
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
+from urllib.request import Request, build_opener
 
 from pydantic import ValidationError
 
-from secure_agent.common.schemas import ReadFileToolCall, ToolCall, ToolResult, parse_tool_call
+from secure_agent.common.schemas import (
+    DEFAULT_MAX_OUTPUT_BYTES, ReadFileToolCall, ToolCall, ToolResult, parse_tool_call,
+)
 from secure_agent.provenance.models import ExposureReceipt
+
+from .http_transport import RejectRedirects
+
+
+# Allow JSON escaping (up to six wire bytes per output byte) and metadata.
+MAX_RESPONSE_BYTES = 256 * 1024
 
 
 class GatewayError(RuntimeError):
@@ -29,6 +39,17 @@ class SecureToolAdapter:
                  acknowledge_exposure: bool = False):
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be positive and finite.")
+        try:
+            url = urlsplit(base_url)
+            valid = (url.scheme in {"http", "https"} and url.hostname and
+                     url.username is None and url.password is None and
+                     not url.query and not url.fragment and url.port != 0 and
+                     not any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in base_url))
+        except ValueError:
+            valid = False
+        if not valid:
+            raise ValueError("Invalid Gateway HTTP(S) base URL.")
+        self._opener = build_opener(RejectRedirects())
         self.url = base_url.rstrip("/") + "/tools/execute"
         self.timeout = timeout
         self.exposure_url = base_url.rstrip("/") + "/tools/exposure"
@@ -43,8 +64,16 @@ class SecureToolAdapter:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self.timeout) as response:
-                body = response.read()
+            with self._opener.open(request, timeout=self.timeout) as response:
+                if response.status != 200:
+                    raise GatewayError(f"Gateway returned HTTP {response.status}.",
+                                       status_code=response.status)
+                expected_size = response.length
+                body = response.read(MAX_RESPONSE_BYTES + 1)
+                if len(body) > MAX_RESPONSE_BYTES:
+                    raise GatewayError("Gateway response exceeds the byte limit.")
+                if expected_size is not None and len(body) != expected_size:
+                    raise GatewayError("Gateway returned an incomplete HTTP response.")
         except HTTPError as error:
             error.close()
             raise GatewayError(
@@ -56,7 +85,7 @@ class SecureToolAdapter:
             if isinstance(error.reason, TimeoutError):
                 raise GatewayError("Gateway request timed out.") from error
             raise GatewayError("Gateway connection failed.") from error
-        except OSError as error:
+        except (OSError, HTTPException) as error:
             raise GatewayError("Gateway connection failed.") from error
 
         try:
@@ -65,6 +94,8 @@ class SecureToolAdapter:
             raise GatewayError("Gateway returned an invalid ToolResult.") from error
         if result.request_id != call.request_id:
             raise GatewayError("Gateway response request_id does not match.")
+        if len(result.output.encode("utf-8")) > DEFAULT_MAX_OUTPUT_BYTES:
+            raise GatewayError("Gateway tool output exceeds the protection limit.")
         if (self.acknowledge_exposure and isinstance(call, ReadFileToolCall)
                 and result.status == "success"):
             receipt = ExposureReceipt(request_id=call.request_id, task_id=call.task_id,
@@ -72,12 +103,12 @@ class SecureToolAdapter:
             acknowledgement = Request(self.exposure_url, data=receipt.model_dump_json().encode("utf-8"),
                                       headers={"Content-Type": "application/json"}, method="POST")
             try:
-                with urlopen(acknowledgement, timeout=self.timeout) as response:
+                with self._opener.open(acknowledgement, timeout=self.timeout) as response:
                     if response.status != 204:
                         raise GatewayError("Exposure acknowledgement failed.")
             except HTTPError as error:
                 error.close()
                 raise GatewayError("Exposure acknowledgement failed.") from error
-            except (OSError, TimeoutError) as error:
+            except (OSError, HTTPException) as error:
                 raise GatewayError("Exposure acknowledgement failed.") from error
         return result

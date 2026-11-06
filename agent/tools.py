@@ -4,6 +4,8 @@ Only request data is created here. No filesystem, process, network, or database
 operation is performed. Execution goes through the separate Gateway adapter.
 """
 
+from copy import deepcopy
+from functools import cache
 from typing import Any
 from uuid import uuid4
 
@@ -40,12 +42,8 @@ class _ToolProposal(ContractModel):
     arguments: dict[str, Any]
 
 
-def get_tool_schemas() -> list[dict[str, Any]]:
-    """Return fresh function schemas derived from the shared argument models.
-
-    JSON Schema describes the structural contract. The shared models additionally
-    enforce Python validators such as workspace-relative path syntax.
-    """
+@cache
+def _tool_schemas() -> list[dict[str, Any]]:
     return [
         {
             "type": "function",
@@ -57,6 +55,11 @@ def get_tool_schemas() -> list[dict[str, Any]]:
         }
         for name, description, arguments_model in _TOOL_DEFINITIONS
     ]
+
+
+def get_tool_schemas() -> list[dict[str, Any]]:
+    """Give each caller an isolated copy of the generated tool schemas."""
+    return deepcopy(_tool_schemas())
 
 
 def validate_tool_proposal(proposal: object) -> dict[str, Any]:

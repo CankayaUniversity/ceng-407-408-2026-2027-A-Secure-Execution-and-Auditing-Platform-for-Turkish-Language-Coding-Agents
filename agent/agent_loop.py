@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import json
 from typing import Any, Literal, Protocol
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from secure_agent.common.schemas import NonEmptyText, ToolCall, ToolResult
 
@@ -41,14 +41,15 @@ class AgentRun:
     tool_calls: tuple[ToolCall, ...]
     steps: int
     stop_reason: Literal[
-        "model_finished", "max_steps", "gateway_error", "llm_timeout", "llm_error"
+        "model_finished", "max_steps", "gateway_error", "tool_error", "tool_denied",
+        "tool_review", "llm_timeout", "llm_error"
     ]
     tool_results: tuple[ToolResult, ...] = ()
     error: str | None = None
 
 
 class AgentLoop:
-    """Generate validated ToolCalls within a fixed model-invocation budget.
+    """Each step takes one model turn or retries one failed read-only call.
 
     Unsupported tools and invalid proposals from custom/mock models raise
     validation errors immediately. Real-client failures stop with llm_error or
@@ -56,6 +57,8 @@ class AgentLoop:
     A run has fresh history. With an adapter, calls go only through the Gateway
     and its validated results are passed to the model. Without an adapter,
     only requests are generated; no operation is executed.
+    Only an explicit error result for a read or list operation permits a retry.
+    Transport failures can occur after execution and terminate the run.
     """
 
     def __init__(
@@ -64,43 +67,72 @@ class AgentLoop:
         *,
         task_id: str,
         max_steps: int = 3,
+        max_retries: int = 1,
         adapter: SecureToolAdapter | None = None,
     ):
         if isinstance(max_steps, bool) or not isinstance(max_steps, int) or max_steps < 1:
             raise ValueError("max_steps must be a positive integer.")
+        if type(max_retries) is not int or max_retries < 0:
+            raise ValueError("max_retries must be a non-negative integer.")
         self.model = model
         self.task_id = TypeAdapter(NonEmptyText).validate_python(task_id, strict=True)
         self.max_steps = max_steps
+        self.max_retries = max_retries
         self.adapter = adapter
 
     def run(self, user_goal: str) -> AgentRun:
         goal = TypeAdapter(NonEmptyText).validate_python(user_goal, strict=True)
         calls: list[ToolCall] = []
         results: list[ToolResult] = []
+        retries = 0
         for step in range(1, self.max_steps + 1):
-            try:
-                proposal = self.model.propose(
-                    user_goal=goal,
-                    tool_schemas=get_tool_schemas(),
-                    history=tuple(calls),
-                    tool_results=tuple(results),
-                )
-            except LLMTimeout as error:
-                return AgentRun(tuple(calls), step, "llm_timeout", tuple(results), str(error))
-            except LLMError as error:
-                return AgentRun(tuple(calls), step, "llm_error", tuple(results), str(error))
-            if proposal is None:
-                return AgentRun(tuple(calls), step, "model_finished", tuple(results))
+            if retries:
+                # Re-authorize the same operation with a fresh request ID.
+                proposal = calls[-1].model_dump(include={"tool", "arguments"})
+            else:
+                try:
+                    proposal = self.model.propose(
+                        user_goal=goal,
+                        tool_schemas=get_tool_schemas(),
+                        history=tuple(calls),
+                        tool_results=tuple(results),
+                    )
+                except LLMTimeout as error:
+                    return AgentRun(tuple(calls), step, "llm_timeout", tuple(results), str(error))
+                except LLMError as error:
+                    return AgentRun(tuple(calls), step, "llm_error", tuple(results), str(error))
+                if proposal is None:
+                    return AgentRun(tuple(calls), step, "model_finished", tuple(results))
             call = make_tool_call(proposal, task_id=self.task_id)
             calls.append(call)
-            if self.adapter is not None:
-                try:
-                    results.append(self.adapter.execute(call))
-                except GatewayError as error:
-                    return AgentRun(
-                        tuple(calls), step, "gateway_error", tuple(results), str(error)
-                    )
-        return AgentRun(tuple(calls), self.max_steps, "max_steps", tuple(results))
+            if self.adapter is None:
+                continue
+            try:
+                result = ToolResult.model_validate(self.adapter.execute(call))
+                if result.request_id != call.request_id:
+                    raise GatewayError("Gateway response request_id does not match.")
+            except ValidationError:
+                return AgentRun(tuple(calls), step, "gateway_error", tuple(results),
+                                "Gateway returned an invalid ToolResult.")
+            except GatewayError as error:
+                return AgentRun(tuple(calls), step, "gateway_error", tuple(results), str(error))
+
+            results.append(result)
+            if result.status == "success":
+                retries = 0
+            elif result.status == "denied":
+                return AgentRun(tuple(calls), step, "tool_denied", tuple(results),
+                                "Tool execution was denied.")
+            elif result.status == "review":
+                return AgentRun(tuple(calls), step, "tool_review", tuple(results),
+                                "Tool execution requires review.")
+            elif call.tool in {"secure_read_file", "secure_list_files"} and retries < self.max_retries:
+                retries += 1
+            else:
+                return AgentRun(tuple(calls), step, "tool_error", tuple(results),
+                                "Tool execution failed.")
+        error = "Step limit reached after a tool failure." if retries else None
+        return AgentRun(tuple(calls), self.max_steps, "max_steps", tuple(results), error)
 
 
 class MockLLM:
@@ -127,6 +159,8 @@ def main() -> int:
     parser.add_argument("--goal", default="README.md dosyasını oku.")
     parser.add_argument("--task-id", default="task-demo-001")
     parser.add_argument("--max-steps", type=int, default=3)
+    parser.add_argument("--max-retries", type=int, default=1,
+                        help="Maximum retries per failed read or list operation.")
     parser.add_argument(
         "--llm-base-url", help="Base API URL including its prefix (env: LLM_BASE_URL)."
     )
@@ -147,7 +181,8 @@ def main() -> int:
             model = MockLLM()
         adapter = (SecureToolAdapter(args.gateway_url, acknowledge_exposure=args.acknowledge_exposure)
                    if args.gateway_url else None)
-        loop = AgentLoop(model, task_id=args.task_id, max_steps=args.max_steps, adapter=adapter)
+        loop = AgentLoop(model, task_id=args.task_id, max_steps=args.max_steps,
+                         max_retries=args.max_retries, adapter=adapter)
         result = loop.run(args.goal)
     except ValueError as error:
         parser.error(str(error))
