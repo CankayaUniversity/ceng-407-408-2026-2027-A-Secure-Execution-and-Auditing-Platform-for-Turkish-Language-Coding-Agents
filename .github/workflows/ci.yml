@@ -15,18 +15,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    env:
+      PYTHONPATH: ${{ github.workspace }}/src
+
     steps:
-      - uses: actions/checkout@v6
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Install dependencies
         run: python -m pip install ".[dev]"
+
       - name: Install project dependencies
         run: python -m pip install -r requirements.txt
-      - name: Run tests
-        run: python -m pytest tests -q
+
+      # Require both Day 5 and Day 6 test files, then run all security tests.
+      # Missing files or failed tests must fail this job.
+      - name: Run security tests
+        run: |
+          test -f tests/security/test_alignment.py
+          test -f tests/security/test_security_pipeline.py
+          python -m pytest tests/security -q
+
+      # Security tests ran above; run the remaining project tests once.
+      - name: Run remaining project tests
+        run: python -m pytest tests --ignore=tests/security -q
+
       - name: Run demo login tests
         working-directory: demo/sample_project
         run: python -m pytest tests/unit -q
