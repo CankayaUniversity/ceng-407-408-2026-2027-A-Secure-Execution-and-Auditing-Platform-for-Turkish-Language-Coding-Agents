@@ -41,7 +41,7 @@ class PermitVerifier:
                              permit_signing_bytes(permit))
             bound = (permit.task_id == call.task_id and permit.tool == call.tool
                      and permit.arguments_hash == tool_arguments_hash(call))
-        except (InvalidSignature, ValueError, TypeError) as error:
+        except (InvalidSignature, ValueError, TypeError, OverflowError) as error:
             raise PermitVerificationError("Permit signature or payload is invalid.") from error
         if not bound:
             raise PermitVerificationError("Permit does not match this operation.")
