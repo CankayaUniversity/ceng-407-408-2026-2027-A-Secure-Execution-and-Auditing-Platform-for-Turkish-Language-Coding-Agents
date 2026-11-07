@@ -18,6 +18,7 @@ from secure_agent.security.supervisor import Supervisor
 
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from secure_agent.gateway.deployment import ReadOnlyExecutorClient, ReadmeDemoSupervisor
     from secure_agent.security.policy_engine import PolicyEngine
     from secure_agent.execution.executor import Executor
 
@@ -25,8 +26,8 @@ if TYPE_CHECKING:
 def create_app(
     database_path: str | Path | None = None, *,
     policy_engine: PolicyEngine | None = None,
-    demo_executor: Executor | None = None,
-    supervisor: Supervisor | None = None,
+    demo_executor: Executor | ReadOnlyExecutorClient | None = None,
+    supervisor: Supervisor | ReadmeDemoSupervisor | None = None,
     demo_private_key: Ed25519PrivateKey | None = None,
 ) -> FastAPI:
     """Create a Gateway with file-backed audit storage."""

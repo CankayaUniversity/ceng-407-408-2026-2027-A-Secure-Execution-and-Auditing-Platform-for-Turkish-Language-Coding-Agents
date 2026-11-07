@@ -118,3 +118,37 @@ class TaskRegistry:
         task = self.get(task_id)
         scope = self._scopes[task.scope_id]
         return TaskScope.model_validate(scope)
+
+
+def create_readme_demo_registry() -> TaskRegistry:
+    """Register the same fixed, read-only demo task in both services."""
+    scope = TaskScope(
+        scope_id="readme-demo",
+        workspace_id="demo",
+        allowed_tools=frozenset({"secure_read_file"}),
+        readable_files=frozenset({"README.md"}),
+    )
+    registry = TaskRegistry(workspace_ids=[scope.workspace_id], scopes=[scope])
+    registry.register(Task(
+        task_id="task-demo-001",
+        user_goal="README.md dosyasını oku.",
+        workspace_id=scope.workspace_id,
+        scope_id=scope.scope_id,
+    ))
+    return registry
+def create_readme_demo_registry() -> TaskRegistry:
+    """Register the same fixed, read-only demo task in both services."""
+    scope = TaskScope(
+        scope_id="readme-demo",
+        workspace_id="demo",
+        allowed_tools=frozenset({"secure_read_file"}),
+        readable_files=frozenset({"README.md"}),
+    )
+    registry = TaskRegistry(workspace_ids=[scope.workspace_id], scopes=[scope])
+    registry.register(Task(
+        task_id="task-demo-001",
+        user_goal="README.md dosyasını oku.",
+        workspace_id=scope.workspace_id,
+        scope_id=scope.scope_id,
+    ))
+    return registry

@@ -1,21 +1,56 @@
 services:
   gateway:
-    build:
+    build: &gateway_build
       context: .
       dockerfile: docker/gateway.Dockerfile
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${DEMO_GATEWAY_PORT:-8000}:8000"
+    command: ["uvicorn", "secure_agent.gateway.deployment:create_compose_gateway", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+    depends_on:
+      keygen:
+        condition: service_completed_successfully
+      executor:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health', timeout=2).close()"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
     volumes:
       - audit_data:/app/data
+      - issuer_keys:/app/issuer:ro
     networks:
       - agent_gateway
       - executor_internal
     restart: unless-stopped
 
+  keygen:
+    build: *gateway_build
+    command: ["python", "/app/scripts/run_demo.py", "--init-keys"]
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - issuer_keys:/app/issuer
+      - verifier_keys:/app/verifier
+    restart: "no"
+
   agent:
     build:
       context: .
       dockerfile: docker/agent.Dockerfile
+    profiles:
+      - demo
+    command: ["python", "-m", "agent.agent_loop", "--llm-mode", "mock", "--gateway-url", "http://gateway:8000", "--acknowledge-exposure"]
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      NO_PROXY: gateway,executor,127.0.0.1,localhost
+      no_proxy: gateway,executor,127.0.0.1,localhost
     init: true
     read_only: true
     cap_drop:
@@ -34,9 +69,14 @@ services:
       context: .
       dockerfile: docker/executor.Dockerfile
 
-    # Enable explicitly while the service entry point is being integrated.
-    profiles:
-      - executor
+    depends_on:
+      keygen:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8001/health', timeout=2).close()"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
 
     init: true
     read_only: true
@@ -49,9 +89,11 @@ services:
     mem_limit: 256m
     pids_limit: 64
 
-    # Only the executor receives this workspace.
+    # The signed demo can read only the seeded README.
     volumes:
-      - executor_workspace:/workspace
+      - executor_workspace:/workspace:ro
+      - executor_state:/app/state
+      - verifier_keys:/app/verifier:ro
 
     # Provide temporary space for Python and test execution.
     tmpfs:
@@ -73,3 +115,6 @@ networks:
 volumes:
   audit_data:
   executor_workspace:
+  executor_state:
+  issuer_keys:
+  verifier_keys:
