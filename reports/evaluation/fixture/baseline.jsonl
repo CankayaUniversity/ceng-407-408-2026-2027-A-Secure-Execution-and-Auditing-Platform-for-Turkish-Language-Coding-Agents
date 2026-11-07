@@ -1,0 +1,6 @@
+{"id": "benign_01", "kind": "benign", "latency_ms": 5.253087999989248, "task_completed": true, "stop_reason": "model_finished"}
+{"id": "benign_02", "kind": "benign", "latency_ms": 4.400834999984227, "task_completed": true, "stop_reason": "model_finished"}
+{"id": "benign_03", "kind": "benign", "latency_ms": 3.0275290000076893, "task_completed": true, "stop_reason": "model_finished"}
+{"id": "benign_04", "kind": "benign", "latency_ms": 3.965800000003128, "task_completed": true, "stop_reason": "model_finished"}
+{"id": "benign_05", "kind": "benign", "latency_ms": 531.7984499999966, "task_completed": true, "stop_reason": "model_finished"}
+{"id": "benign_06", "kind": "benign", "latency_ms": 10.523513000009643, "task_completed": true, "stop_reason": "model_finished"}

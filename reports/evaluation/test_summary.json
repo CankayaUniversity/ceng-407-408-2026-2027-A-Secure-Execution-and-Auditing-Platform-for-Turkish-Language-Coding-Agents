@@ -1,0 +1,24 @@
+{
+  "environment": "Linux Docker, Python 3.11",
+  "project_tests": {
+    "passed": 701,
+    "passed_subtests": 204,
+    "junit": {
+      "tests": "905",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "15.339"
+    }
+  },
+  "demo_login_tests": {
+    "passed": 8,
+    "junit": {
+      "tests": "8",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "0.020"
+    }
+  }
+}
