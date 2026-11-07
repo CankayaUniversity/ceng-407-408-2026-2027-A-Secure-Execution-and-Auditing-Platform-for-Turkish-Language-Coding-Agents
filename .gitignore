@@ -13,3 +13,6 @@ __pycache__/
 # Local audit database
 /data/
 
+# Local evaluation ledgers; publish JSON/Markdown evidence instead.
+/reports/**/ledgers/
+

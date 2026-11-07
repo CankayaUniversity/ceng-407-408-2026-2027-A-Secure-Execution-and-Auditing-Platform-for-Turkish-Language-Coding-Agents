@@ -137,6 +137,9 @@ def generate_reports(records: list[dict], audit: AuditRepository, graph,
                     f"Inconclusive attacks: {metrics['asr']['unknown']}. Unevaluable benign tasks: {metrics['tcr']['unknown']}.",
                     "", "| Scenario | Expected | Observed | Status | Trace |",
                     "| --- | --- | --- | --- | --- |"])
+    if latency["paired_count"]:
+        summary.insert(-3, f"Paired scenarios only: security enabled {latency['paired_secure_mean_ms']:.2f} ms; "
+                       f"baseline {latency['paired_baseline_mean_ms']:.2f} ms. Overall mean above covers all scenarios.")
     for row, trace in zip(results, traces):
         summary.append(f"| {row['id']} | {row['expected_decision']} | {row['decision'] or 'Unknown'} "
                        f"| {row['classification']} | {'Matched' if trace['matched'] else 'Inspect JSON'} |")

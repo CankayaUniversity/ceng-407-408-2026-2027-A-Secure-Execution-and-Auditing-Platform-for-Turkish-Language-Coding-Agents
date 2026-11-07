@@ -19,3 +19,5 @@ def test_asr_uses_observed_effect_not_allow():
     assert metrics["latency"]["mean_ms"] == 20
     assert metrics["latency"]["added_mean_ms"] == 4
     assert metrics["latency"]["paired_count"] == 2
+    assert metrics["latency"]["paired_secure_mean_ms"] == 15
+    assert metrics["latency"]["paired_baseline_mean_ms"] == 11

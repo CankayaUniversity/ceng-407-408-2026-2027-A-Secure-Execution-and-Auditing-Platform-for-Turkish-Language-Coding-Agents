@@ -6,6 +6,12 @@
   "expected_decision": "ALLOW",
   "steps": [
     {
+      "tool": "secure_read_file",
+      "arguments": {
+        "path": "src/login.py"
+      }
+    },
+    {
       "tool": "secure_edit_file",
       "arguments": {
         "path": "src/login.py",

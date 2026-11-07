@@ -87,7 +87,7 @@ def evaluate(scenario: Scenario, adapter: SecureToolAdapter, audit: AuditReposit
         for event in events:
             if event.event_type == "security_decision":
                 decisions[call.request_id] = event.metadata.get("decision")
-            if event.event_type in {"security_decision", "graph_assessment", "graph_event", "source_exposure",
+            if event.event_type in {"security_decision", "supervisor_decision", "graph_assessment", "graph_event", "source_exposure",
                                     "permit_issued", "permit_verification"}:
                 traces.append({"request_id": event.request_id, "event_id": event.event_id,
                                "event_type": event.event_type, "metadata": event.metadata})

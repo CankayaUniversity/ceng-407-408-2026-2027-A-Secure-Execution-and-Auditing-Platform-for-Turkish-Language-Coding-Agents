@@ -18,6 +18,7 @@ networkx==3.6.1
 
 # Agent and supervisor LLM client
 openai==2.54.0
+python-dotenv>=1,<2
 
 # Ed25519 signatures, encrypted audit support, and canonical JSON
 cryptography==50.0.2

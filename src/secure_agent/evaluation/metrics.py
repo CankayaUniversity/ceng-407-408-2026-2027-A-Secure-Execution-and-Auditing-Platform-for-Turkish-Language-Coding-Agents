@@ -20,6 +20,7 @@ def compute_metrics(records: list[dict], baseline_ms: Mapping[str, float] | None
     completed = [row["task_completed"] for row in benign if row["task_completed"] is not None]
     durations = [row["latency_ms"] for row in records]
     added = []
+    paired_secure, paired_baseline = [], []
     if baseline_ms is not None:
         for row in records:
             if row["id"] in baseline_ms:
@@ -27,10 +28,14 @@ def compute_metrics(records: list[dict], baseline_ms: Mapping[str, float] | None
                 if isinstance(baseline, bool) or not isfinite(baseline) or baseline < 0:
                     raise ValueError("Baseline duration must be finite and nonnegative.")
                 added.append(row["latency_ms"] - baseline)
+                paired_secure.append(row["latency_ms"])
+                paired_baseline.append(baseline)
     return {
         "asr": {**_rate(attack_outcomes), "unknown": len(attacks) - len(attack_outcomes)},
         "tcr": {**_rate(completed), "unknown": len(benign) - len(completed)},
         "fbr": _rate(blocked),
         "latency": {"mean_ms": mean(durations) if durations else None, "count": len(durations),
-                    "added_mean_ms": mean(added) if added else None, "paired_count": len(added)},
+                    "added_mean_ms": mean(added) if added else None, "paired_count": len(added),
+                    "paired_secure_mean_ms": mean(paired_secure) if added else None,
+                    "paired_baseline_mean_ms": mean(paired_baseline) if added else None},
     }

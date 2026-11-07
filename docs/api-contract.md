@@ -1161,11 +1161,6 @@ An optional `--baseline` accepts results from an equivalent isolated run with
 matched scenario IDs and measured baseline durations. Without it, added latency
 is unmeasured. Reports distinguish policy blocks, observed effects and errors.
 
-`reports/day6-demo` archives an earlier run of the six benign scenarios and
-six synthetic attack fixtures over HTTP with a mock Supervisor. The Day 5
-integration test above exercises the committed attack suite. The archived
-run used scripted model proposals and has no paired baseline.
-
 ## 22. Day 5 — Source context and local decision resolver
 
 **Implementation:** `src/secure_agent/security/supervisor.py`  
