@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-08",
+  "base_commit": "9430e80",
+  "full_linux_regression": {
+    "passed": 711,
+    "subtests_passed": 204,
+    "demo_login_passed": 8,
+    "project_junit": {
+      "tests": "915",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "24.857"
+    },
+    "demo_junit": {
+      "tests": "8",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "0.023"
+    }
+  },
+  "additional_linux_integration_check": {
+    "name": "test_misaligned_verdict_blocks_all_in_scope_attack_targets",
+    "passed": 1,
+    "note": "Added after the full regression; verified separately."
+  },
+  "live_gemini": {
+    "advanced_benign": {
+      "completed": 5,
+      "total": 6,
+      "false_blocks": 1
+    },
+    "adversarial": {
+      "attacks_succeeded": 0,
+      "total": 6,
+      "unknown": 0
+    }
+  },
+  "ci": "Not run for these unpushed changes; CI runs deterministic tests without live API calls.",
+  "earlier_twelve_case_dataset": "unchanged"
+}

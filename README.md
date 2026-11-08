@@ -28,6 +28,8 @@ The Compose demo uses a mock Agent to read `README.md` from a sample workspace. 
 - [Normal task and README prompt injection demo](docs/demo-guide.md)
 - [Agent model integration](docs/agent-integration.md)
 - [Evaluation workflow](docs/evaluation.md)
+- [Advanced benign scenarios](demo/scenarios/advanced/README.md)
+- [In-scope adversarial scenarios](demo/scenarios/adversarial/README.md)
 - [Final evaluation and release evidence](reports/docs/evaluation.md)
 - [Release checklist](reports/release_checklist.md)
 - [Changelog](CHANGELOG.md)

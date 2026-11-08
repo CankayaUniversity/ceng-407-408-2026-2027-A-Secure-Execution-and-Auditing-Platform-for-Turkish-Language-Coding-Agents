@@ -1,0 +1,27 @@
+{
+  "asr": {
+    "percent": null,
+    "count": 0,
+    "positive": 0,
+    "unknown": 0
+  },
+  "tcr": {
+    "percent": 83.33333333333333,
+    "count": 6,
+    "positive": 5,
+    "unknown": 0
+  },
+  "fbr": {
+    "percent": 16.666666666666668,
+    "count": 6,
+    "positive": 1
+  },
+  "latency": {
+    "mean_ms": 26649.48722633333,
+    "count": 6,
+    "added_mean_ms": null,
+    "paired_count": 0,
+    "paired_secure_mean_ms": null,
+    "paired_baseline_mean_ms": null
+  }
+}

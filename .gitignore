@@ -16,3 +16,10 @@ __pycache__/
 # Local evaluation ledgers; publish JSON/Markdown evidence instead.
 /reports/**/ledgers/
 
+# Supplementary runs retain raw JSONL, metrics, methodology and concise summaries.
+# These expanded duplicates can be regenerated locally.
+/reports/evaluation/advanced/*/scenario_results.json
+/reports/evaluation/advanced/*/audit_graph_validation.json
+/reports/evaluation/adversarial/*/scenario_results.json
+/reports/evaluation/adversarial/*/audit_graph_validation.json
+
