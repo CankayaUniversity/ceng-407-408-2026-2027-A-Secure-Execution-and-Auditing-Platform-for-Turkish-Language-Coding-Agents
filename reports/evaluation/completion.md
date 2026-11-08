@@ -2,6 +2,9 @@
 
 7 Kasım 2026 tarihli yerel doğrulama. CI doğrulaması push sonrasında yapılmalı.
 
+Bu dosya 7 Kasım koşusunun tarihsel özetidir. 8 Kasım ayrı Executor servisi ve
+sürüm doğrulamasının güncel sonucu için `reports/docs/evaluation.md` dosyasına bakın.
+
 | Gün | Kişisel teslim | Doğrulama |
 | --- | --- | --- |
 | 1 | SQLite audit, logger, pytest ve CI altyapısı | Repository/logger/Gateway audit testleri; gerçek çalıştırmalarda SQLite kayıtları |

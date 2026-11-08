@@ -153,6 +153,8 @@ def main() -> int:
         epilog="Set LLM_API_KEY in the environment if the model service requires a key.",
     )
     parser.add_argument("--gateway-url", help="Send tool calls to this Gateway.")
+    parser.add_argument("--gateway-timeout", type=float, default=5.0,
+                        help="Gateway socket timeout in seconds (default: 5).")
     parser.add_argument("--acknowledge-exposure", action="store_true",
                         help="Acknowledge successful reads to the demo Gateway graph.")
     parser.add_argument("--llm-mode", choices=("mock", "real"), default="mock")
@@ -179,7 +181,8 @@ def main() -> int:
             ))
         else:
             model = MockLLM()
-        adapter = (SecureToolAdapter(args.gateway_url, acknowledge_exposure=args.acknowledge_exposure)
+        adapter = (SecureToolAdapter(args.gateway_url, timeout=args.gateway_timeout,
+                                     acknowledge_exposure=args.acknowledge_exposure)
                    if args.gateway_url else None)
         loop = AgentLoop(model, task_id=args.task_id, max_steps=args.max_steps,
                          max_retries=args.max_retries, adapter=adapter)

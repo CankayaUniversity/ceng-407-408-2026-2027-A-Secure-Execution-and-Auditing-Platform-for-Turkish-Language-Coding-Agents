@@ -1,0 +1,252 @@
+{
+  "base_commit": "8f44b66ca75d02a2952b8b84288d205231be3018",
+  "measurement_date": "2026-11-07",
+  "verification_date": "2026-11-08",
+  "metric_verification": {
+    "fixture": {
+      "scenarios": 12,
+      "trace_matched": 12,
+      "metrics_recomputed": true,
+      "metrics": {
+        "asr": {
+          "percent": 0.0,
+          "count": 6,
+          "positive": 0,
+          "unknown": 0
+        },
+        "tcr": {
+          "percent": 100.0,
+          "count": 6,
+          "positive": 6,
+          "unknown": 0
+        },
+        "fbr": {
+          "percent": 0.0,
+          "count": 6,
+          "positive": 0
+        },
+        "latency": {
+          "mean_ms": 406.56358275000315,
+          "count": 12,
+          "added_mean_ms": 312.04267566667454,
+          "paired_count": 6,
+          "paired_secure_mean_ms": 405.2042115000063,
+          "paired_baseline_mean_ms": 93.16153583333175
+        }
+      },
+      "source_sha256": {
+        "evaluation.jsonl": "3602777c3e8adf416bc10eb4c56eaf7ab16d753caf6398df59e09f6ec55fe255",
+        "baseline.jsonl": "6b74764907ff0568e163725b6ed23e16d73cdd202c949f9ff57a8a3086a71ee5",
+        "metrics_report.json": "373c7d8c269fee86eda82bf00fb7826e5817bf16fcc4a990212b9e185e12d551",
+        "audit_graph_validation.json": "ceab1e1aaa99b675fded20c5429a072db1836cd8b7556b77f3ebdecb327c46ff"
+      }
+    },
+    "gemini": {
+      "scenarios": 12,
+      "trace_matched": 12,
+      "metrics_recomputed": true,
+      "metrics": {
+        "asr": {
+          "percent": 0.0,
+          "count": 6,
+          "positive": 0,
+          "unknown": 0
+        },
+        "tcr": {
+          "percent": 100.0,
+          "count": 6,
+          "positive": 6,
+          "unknown": 0
+        },
+        "fbr": {
+          "percent": 0.0,
+          "count": 6,
+          "positive": 0
+        },
+        "latency": {
+          "mean_ms": 2773.7847829999987,
+          "count": 12,
+          "added_mean_ms": 4180.192139499999,
+          "paired_count": 6,
+          "paired_secure_mean_ms": 4277.104184666664,
+          "paired_baseline_mean_ms": 96.91204516666592
+        }
+      },
+      "source_sha256": {
+        "evaluation.jsonl": "70d319dcc9dc12f6f963a390dcce8feb99bcb44170cf29c6881dfc32fc909d0f",
+        "baseline.jsonl": "7a4fdd3d779a31d252fc30c7d1e57bd2977f255a9d33e20d80ce70e180f41215",
+        "metrics_report.json": "73142822b7e449e51f3e880c810604aee5ceced9062eb9579ac39f353c292eec",
+        "audit_graph_validation.json": "a471e2318a2877cfd5361b5989b1750d2e998ae1c416c125c0f602545ab1c606"
+      }
+    }
+  },
+  "clean_clone": {
+    "commit": "8f44b66ca75d02a2952b8b84288d205231be3018",
+    "contains_personal_env": false
+  },
+  "source_ci": {
+    "conclusion": "success",
+    "head_sha": "8f44b66ca75d02a2952b8b84288d205231be3018",
+    "url": "https://github.com/CankayaUniversity/ceng-407-408-2026-2027-A-Secure-Execution-and-Auditing-Platform-for-Turkish-Language-Coding-Agents/actions/runs/42425753518"
+  },
+  "new_linux_tests": {
+    "status": "passed",
+    "python": "3.11.18",
+    "project_passed": 707,
+    "subtests_passed": 204,
+    "demo_login_passed": 8,
+    "project_junit": {
+      "tests": "911",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "15.548"
+    },
+    "demo_junit": {
+      "tests": "8",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "0.020"
+    }
+  },
+  "clean_compose": {
+    "status": "passed",
+    "command": "python -X utf8 scripts/run_demo.py",
+    "compose_project": "secure-demo-e74a5b5c56",
+    "checks": [
+      "service health",
+      "unsigned permit rejected",
+      "non-root/read-only mounts/resource limits",
+      "agent cannot reach Executor",
+      "Executor has no external IPv4 route",
+      "signed read",
+      "result redaction",
+      "audit/provenance edges",
+      "restart graph and nonce persistence",
+      "logs without canary/private-key header"
+    ],
+    "log_sha256": "519349e7651bfce78484fef75b25067da196a951044b5314bcc626bd5d11b94a",
+    "resources": "fresh project and volumes, removed after successful run",
+    "agent": "mock",
+    "source_commit": "8f44b66ca75d02a2952b8b84288d205231be3018"
+  },
+  "live_compose": {
+    "status": "passed",
+    "command": "python -X utf8 scripts/run_demo.py --gemini",
+    "compose_project": "secure-demo-506d838985",
+    "checks": [
+      "service health",
+      "unsigned permit rejected",
+      "non-root/read-only mounts/resource limits",
+      "agent cannot reach Executor",
+      "Executor has no external IPv4 route",
+      "signed read",
+      "result redaction",
+      "audit/provenance edges",
+      "restart graph and nonce persistence",
+      "logs without canary/private-key header"
+    ],
+    "log_sha256": "f46a2df2543fe8116db7f7fe47555c26ddf71e0c6845af290ee73bb15ac79b59",
+    "resources": "fresh project and volumes, removed after successful run",
+    "agent": "mock",
+    "supervisor_model": "gemini-3.1-flash-lite",
+    "credential_delivery": "read-only secret file to Gateway only",
+    "source": "local release preparation on 8f44b66ca75d02a2952b8b84288d205231be3018"
+  },
+  "release_source_sha256": {
+    ".dockerignore": "93f68648a75a90a255e21a1e979e9c401cf4c6582251120b058e254376cf8897",
+    "agent/agent_loop.py": "98771aa457353e81e98988e173c78b26626446e37d8628764292c399b22c4b79",
+    "agent/http_transport.py": "a8d08c8db0949a197ac08c06e1493d3cd2a277be9df1aef4284f10d62d57a23b",
+    "agent/llm_client.py": "b0078432a7e365f0f9f80c3a3f240902a74a85628d76b44c3c852c7c0df307c8",
+    "agent/tool_adapter.py": "b0e9d436a936fb531113a4d6f909587ca4e535877408dbb299ed9a7e32e34e2c",
+    "agent/tools.py": "2c8988e0f27f9987bdd12d03eed12e73f47f9cb09f3bb57df5ff840f3cf28124",
+    "demo/attack_project/src/login.py": "c861bb9030956fa1d45f09343910087852ae6e0c6f2b64316d1b9873f9dfcccb",
+    "demo/attack_project/tests/unit/test_login.py": "28b1de8cd934a5e03c0554d116893a2bcc47f9b4753ceeda1e7c81bf36f2e9bd",
+    "demo/day5_model_pairs.py": "06d0f25a1381050a1ce0c3160835bef281d844b64340ffa6a2f446ff2c4cb7bd",
+    "demo/evaluate.py": "e496bdc22f16c9dbc9cdc100e62b4d0d5fde9a0aa653040b5f1ed4dcc5c8629d",
+    "demo/readme_pilot.py": "2030d57c6bee62394f4d5dccc97e474b2f553be253bf266f84d8bf414a7c00fa",
+    "demo/sample_project/src/config.py": "00f0946efcb476659ee789f4fc898438972a76a4ac76b4976a99e8340fcf9cfa",
+    "demo/sample_project/src/login.py": "da466ae4ac76edbddd816ef5ceae4993e9f3fbcbf06931c538efc7c6151e92d1",
+    "demo/sample_project/tests/unit/test_login.py": "667805ea645846399af4896488a271be71dfdf1597a4f58d645acb58bff12940",
+    "docker/agent.Dockerfile": "c5f73146c024da8c2285f868f8f9bc25796b558c2618da91afc4a091776721c0",
+    "docker/executor.Dockerfile": "17e6a70437dc6ce422d306506c14cd5b3054466362f1eb1109ef5304f8045e22",
+    "docker/gateway.Dockerfile": "ab32feb1188534593cf8fb21f50f7b1b88031a4952b9a61c48f30a75f054f03f",
+    "docker-compose.gemini.yml": "15e97d03f187db70253d90af3cfa2d3f9a679381af341c221b7a67efd2c2c386",
+    "docker-compose.yml": "fffd5d0d2c707b070a63fed071cc548e9ea222c4a4d2c2b9b35298add427d321",
+    "pyproject.toml": "99fc75dc459902f3a195b70da6f0a8da056dbf4ac6d9f951a8c0e4d2b6fd1439",
+    "requirements.txt": "fe37578ded65023dc312a4e9032eb1d5ba92bd982c752dab81cb8fd58c4118d4",
+    "scripts/check_gemini_supervisor.py": "6e6a9f6cc3bd17b1c7df1f4eee3e4061bda2d278b18b5d026492f16a8672e417",
+    "scripts/run_demo.py": "1624271d11bada8e3c0633667b6f65fe6999fcdfe3c3c0bfb636ac8d33c47ea2",
+    "src/secure_agent/audit/__init__.py": "d1376734e325b50e6301d7872fc32734a3fdb26dbb3319f0a500347e7f359fde",
+    "src/secure_agent/audit/logger.py": "b5df27da94d52646ddc407fd2e1304eb07f2da2d178b8094b8824fa98faa6501",
+    "src/secure_agent/audit/repository.py": "2151b0956fa313c7f0a145b7cf2d64a3962be6c1676d1d6c0cc8501c01c5d3ae",
+    "src/secure_agent/common/canonical_json.py": "90d8c4e9450158e687a8f9a47a3b1ba179f8d0a384789cce12757775bf4058dc",
+    "src/secure_agent/common/schemas.py": "1280aaa9f9f1b73fdce8de228b76910e0ebc03bba887e64e7084213ee22c8d77",
+    "src/secure_agent/evaluation/__init__.py": "b4cd444d70c7dc6447ed7c1ee34f90fa6144101737f0294bb0085e6aa5ca8c29",
+    "src/secure_agent/evaluation/metrics.py": "2f1ef8d5a6446f575aa3f518b451214cea07def15dd9ab4e0ee08b72e7dfc4d7",
+    "src/secure_agent/evaluation/report.py": "9b7c66e31f4506a77e763fe54e419f33c9aca5a1348554bb999360ae293e0436",
+    "src/secure_agent/evaluation/runner.py": "8c320228141693c2c0bafb88e33d46469cffd488205f11c66c18662a8e4ee92b",
+    "src/secure_agent/execution/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/secure_agent/execution/executor.py": "8a5dc37143cae15f3136507c3ed2c3b1d445418b563eb7a4f00ee9d37e0364aa",
+    "src/secure_agent/execution/filesystem.py": "c1691e384ddf7c5332466d8d6f2f61d0463e255a72fd136c3add24ff8f10eb07",
+    "src/secure_agent/execution/service.py": "79e99314338daffd2d424796594040f3eb9599752741338d6a42806e7e3c8aaf",
+    "src/secure_agent/execution/test_runner.py": "d8042ce5ec5ee67c18f4880f37045e2d0d6adb098ba0e90d770fe24c5d5e80c3",
+    "src/secure_agent/gateway/__init__.py": "46377db5e3636b6bf913e738db992d7b606b0a10fbf07a004edf31a9ad0c7880",
+    "src/secure_agent/gateway/deployment.py": "167d494e8e66bfaeae9000e98a7e7d4fcd17e5b1411a89ce5d02734be21eccd8",
+    "src/secure_agent/gateway/main.py": "b141c74c564408ba42377d86f6ed8683ad47752b5d66c47922e03cb733502a47",
+    "src/secure_agent/gateway/orchestrator.py": "fab9fc79aec274096d9c6c28000fc8563da05a703e00d5e1ec2dabedb46be21d",
+    "src/secure_agent/gateway/routes.py": "dedeba4518565b49f2ea2d9a94fe5b62543b148998d188e50850c5b2e99b9bb7",
+    "src/secure_agent/provenance/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/secure_agent/provenance/constructor.py": "39a757af97bf0729ffbc6b928f699720830088963132cb65943757c2a62beca1",
+    "src/secure_agent/provenance/inspector.py": "70b0e0b63a66f55de4b4191fc59eb6a8a3ee2b4852d4fd81351c1067560e26f1",
+    "src/secure_agent/provenance/models.py": "e7e4ff2ee39df50a852b1d3fe29f3448cd6b552770dfdfeb842ee6d62cb3f910",
+    "src/secure_agent/provenance/recorder.py": "48eb3dd0639c0a59347faae0741464663e7dfbd720058b54bd842b459d8d05cc",
+    "src/secure_agent/provenance/repository.py": "f55f6384109ac5352191db1885f7881f2ad3345b6b0f06c3488908ebebbfab1a",
+    "src/secure_agent/security/decision_engine.py": "5ff739dd7aea435ee1554a7c08f4cce2ec8b4b7579d8bfbb0f66ea767c816d70",
+    "src/secure_agent/security/gemini_client.py": "e2344423c0ab84f533c06b8ed132aac88935dabaa0c13286a54bb69cc6e52fa8",
+    "src/secure_agent/security/permit_issuer.py": "b854f93c6152bc0bedaccf6a4e7b046fdb3ce520297ea71f5e6570c554455a15",
+    "src/secure_agent/security/permit_verifier.py": "fcef4afa5a50d32dd6afddc2f32ded279da1f0d20a5331e4e4d914138745693a",
+    "src/secure_agent/security/policy_engine.py": "36ed4f379664e194b3e4fe7286de73805cb76ace539221ff68ba4a40e30e066d",
+    "src/secure_agent/security/result_protection.py": "18f387ab0f37d998c0f194145f5780986570d000049ad3fc14fcc17849826db0",
+    "src/secure_agent/security/supervisor.py": "79f6536f7375948d43dc4e2dafaafaaba5c48ff13fa9c314281bb6afab011093",
+    "src/secure_agent/tasks/registry.py": "1d40574b1234f08d38206065e9170fe8953c0da9c7378a4010a2f7f168649f7c",
+    "src/secure_agent/tasks/scope.py": "f98b5e9324ee4b26bd7855bf2e6bd08bb61bc46545289cd15e97c6fbbc3c6378",
+    "tests/conftest.py": "66095e5f537e8ec4e53cd5e00a0b4e362cb5a8b523b9b44597c71ae05ebda7d5",
+    "tests/integration/test_agent_flow.py": "92381dcf4fded309e22a6dcf334dc755593a8d11eef27ead011cc7b03a9d9a45",
+    "tests/integration/test_evaluation_flow.py": "2131ae4ad9198ae3ee53bc517b21562a6570200ce84b3ee59f15f5d405a3cdc2",
+    "tests/integration/test_executor_service.py": "f1ff91791cda04c80a2f660417d320f6ebf178a28433f050fc5a20433814b075",
+    "tests/integration/test_gateway_audit.py": "2ab12a0295f1d63ed8dd930dda3dbe5baa8b2ee3368ae7330f488a1aa6f00b95",
+    "tests/integration/test_policy_flow.py": "73c171f10d3a29e1c94cc15bead8ebf7102ee5edda5a473abf95217cdb4753d3",
+    "tests/integration/test_provenance_flow.py": "22060e7a30b3aede71373f5890657bc172922ea9dcfdc3d0a0bc74e25e699ca3",
+    "tests/integration/test_readme_pilot.py": "76717c0cd4382ea0ce49ccde18b6bf65793c3eff2c7d6e32d0935d63e37e2eff",
+    "tests/integration/test_result_protection_flow.py": "a56a2623ccd8f31fd392f3f76acbf52563268f3e4910125e9bed5e10a0cbc8e9",
+    "tests/security/test_alignment.py": "f2b335d7bed5e5a8b97bd9b6b191f1fe03da08eb1aecb5422ba38e2a88e63f10",
+    "tests/security/test_permits.py": "535d9694bdc162b0977d7c9df77ea5c6c1250c95c17b8f4c9e9a894b36e4243c",
+    "tests/security/test_security_pipeline.py": "346d20664b289d7d1fc78a9e17a506728b66847b8a65aeb16849f3ede25004ee",
+    "tests/unit/test_agent.py": "58141b80558d5713fd9487b2603bdb77e6aa5176d3c4a94bb0694fea31406eb0",
+    "tests/unit/test_audit_event.py": "b4728346edbddb95e1b52b6d7ca948bd25f6456ffd300c2fdc89da2a1f425e5b",
+    "tests/unit/test_audit_logger.py": "dffc89b636e2b7cd15b9e9f77b88ae90d95324c004a991e1e50e354ea291abcb",
+    "tests/unit/test_audit_repository.py": "30153948dde56e467001b11eee042c4fa96e60174b1bcd3b6c3bdd8dc9438c91",
+    "tests/unit/test_canonical_json.py": "c30c0021c1a273567bafbc6daa9aa4e8f6473e6d9eb65fcd048e422dae3d31af",
+    "tests/unit/test_decision_engine.py": "8d78959b74ab2d142e232805eb227c9c51b612d4c08c7d56596b10eb7db3be33",
+    "tests/unit/test_deployment_config.py": "81db2b74612a1d1c7dac87d0d46140f51bae036bbf55cecc1f7b41dd0801f486",
+    "tests/unit/test_evaluation_metrics.py": "0e124e671d396fac0eeb0ebb09ebb8f1b22b9c3b06c0cfccff2b35f7cc910b63",
+    "tests/unit/test_executor.py": "1df6cfb90abfa6b01daa277612c344112296d0d56380c05062920ce03f6223e0",
+    "tests/unit/test_filesystem.py": "ad18871177f0acfe6f92ca9bae24022687aceb6c372dc69dc0f5c1a9545176ce",
+    "tests/unit/test_gemini_client.py": "b8c01b76006b92ceef8103815d76bea39b4425d859266bc62d598c59288b9a3f",
+    "tests/unit/test_graph_inspector.py": "a3c878514523fad14b056d9743147ae7262863745f198e88ea2444a22e43287a",
+    "tests/unit/test_llm_client.py": "b8f37b17ea0e9d14790c9e81c3919fc05f2abfde7233b369ced004ce03321127",
+    "tests/unit/test_orchestrator.py": "cfea7345b7ea39c504585ea41a0102893f4249d19eb0f95b65a2050cc9c093e4",
+    "tests/unit/test_permit_issuer.py": "0eb842ed653edc5faba7edee922d5dedcdfad971d0ef288c424b36e338d0b138",
+    "tests/unit/test_permit_verifier.py": "8251e59065e69b377c53f0ecfefa3022ace99e1c30afb922541061b718e7cc29",
+    "tests/unit/test_policy_engine.py": "6799f36fa07a888018066d9993d9797a7076c1ca6c90e9c5c67cac81c205e4c2",
+    "tests/unit/test_provenance.py": "cd496bd08ae12267b3fdcfc2eaa71c1c3b9a1868bb88df7d09de49625d39d43d",
+    "tests/unit/test_result_protection.py": "592b0b3fa534392db672bef7463d1746bc367b16ec1f5564d59c347afe4e6f85",
+    "tests/unit/test_schemas.py": "d8b451670e375b9764c29676d4d40ccbf0740dc6c72dd26f94fc44e699e0fc43",
+    "tests/unit/test_supervisor.py": "4290fa601c3b4c95fc8c0cae69a4e8552295228e1b3efab5c4c1b507ea9b3184",
+    "tests/unit/test_task_registry.py": "fc7c1c4038c4bbaec0877cb449e614bb823be5dd1ae3541552579ce3bacb6a52",
+    "uv.lock": "94b939e2232b7c6957b12d80633e5a2ab5ff648c0f6dd0ffc9e1da584202ce7f"
+  },
+  "publication": "not pushed; remote CI covers base commit only"
+}

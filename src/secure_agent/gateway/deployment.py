@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
@@ -20,7 +21,7 @@ from secure_agent.gateway.main import create_app
 from secure_agent.security.permit_issuer import load_ed25519_private_key
 from secure_agent.security.permit_verifier import PermitVerificationError
 from secure_agent.security.policy_engine import PolicyEngine
-from secure_agent.security.supervisor import SupervisorDecision
+from secure_agent.security.supervisor import Supervisor, SupervisorDecision
 from secure_agent.tasks.registry import create_readme_demo_registry
 
 
@@ -94,20 +95,45 @@ class ReadmeDemoSupervisor:
 
 def create_compose_gateway() -> FastAPI:
     """Enable the Gateway demo using a private signing key and remote executor."""
+    provider = os.environ.get("SUPERVISOR_PROVIDER", "fixture")
+    if provider not in {"fixture", "gemini"}:
+        raise ValueError("SUPERVISOR_PROVIDER must be fixture or gemini.")
+    registry = create_readme_demo_registry()
     config_dir = Path(os.environ.get("DEMO_CONFIG_DIR", "/app/configs"))
     policy = PolicyEngine(
-        registry=create_readme_demo_registry(),
+        registry=registry,
         model_path=config_dir / "casbin_model.conf",
         policy_path=config_dir / "casbin_policy.csv",
     )
     key = load_ed25519_private_key(os.environ.get(
         "DEMO_PRIVATE_KEY_FILE", "/app/issuer/private.pem",
     ))
-    return create_app(
+    client = None
+    supervisor = ReadmeDemoSupervisor()
+    if provider == "gemini":
+        from secure_agent.security.gemini_client import DEFAULT_MODEL, GeminiClient
+
+        client = GeminiClient(model=os.environ.get("GEMINI_MODEL", DEFAULT_MODEL),
+                              env_file=os.environ.get("GEMINI_ENV_FILE"))
+        supervisor = Supervisor(registry=registry, llm_client=client)
+    app = create_app(
         policy_engine=policy,
-        supervisor=ReadmeDemoSupervisor(),
+        supervisor=supervisor,
         demo_executor=ReadOnlyExecutorClient(
             os.environ.get("EXECUTOR_URL", "http://executor:8001"),
         ),
         demo_private_key=key,
     )
+    if client is not None:
+        original_lifespan = app.router.lifespan_context
+
+        @asynccontextmanager
+        async def lifespan(application):
+            try:
+                async with original_lifespan(application):
+                    yield
+            finally:
+                client.close()
+
+        app.router.lifespan_context = lifespan
+    return app

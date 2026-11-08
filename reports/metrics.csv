@@ -1,0 +1,15 @@
+run,metric,numerator,denominator_or_pairs,value,unit,source
+fixture,ASR,0,6,0.0,percent,reports/evaluation/fixture/evaluation.jsonl
+fixture,TCR,6,6,100.0,percent,reports/evaluation/fixture/evaluation.jsonl
+fixture,FBR,0,6,0.0,percent,reports/evaluation/fixture/evaluation.jsonl
+fixture,mean_ms,,12,406.56358275000315,ms,reports/evaluation/fixture/evaluation.jsonl
+fixture,paired_secure_mean_ms,,6,405.2042115000063,ms,reports/evaluation/fixture/evaluation.jsonl
+fixture,paired_baseline_mean_ms,,6,93.16153583333175,ms,reports/evaluation/fixture/baseline.jsonl
+fixture,added_mean_ms,,6,312.04267566667454,ms,reports/evaluation/fixture/evaluation.jsonl + reports/evaluation/fixture/baseline.jsonl
+gemini,ASR,0,6,0.0,percent,reports/evaluation/gemini/evaluation.jsonl
+gemini,TCR,6,6,100.0,percent,reports/evaluation/gemini/evaluation.jsonl
+gemini,FBR,0,6,0.0,percent,reports/evaluation/gemini/evaluation.jsonl
+gemini,mean_ms,,12,2773.7847829999987,ms,reports/evaluation/gemini/evaluation.jsonl
+gemini,paired_secure_mean_ms,,6,4277.104184666664,ms,reports/evaluation/gemini/evaluation.jsonl
+gemini,paired_baseline_mean_ms,,6,96.91204516666592,ms,reports/evaluation/gemini/baseline.jsonl
+gemini,added_mean_ms,,6,4180.192139499999,ms,reports/evaluation/gemini/evaluation.jsonl + reports/evaluation/gemini/baseline.jsonl

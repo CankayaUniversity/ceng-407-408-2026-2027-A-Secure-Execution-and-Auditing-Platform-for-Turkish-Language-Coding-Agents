@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir \
     "pydantic==2.14.2" \
     "uvicorn==0.54.0" \
     "httpx==0.28.1" \
+    "python-dotenv==1.2.4" \
     "casbin==1.43.0" \
     "networkx==3.6.1" \
     "cryptography==50.0.2" \

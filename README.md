@@ -12,6 +12,14 @@ cd secure-coding-agent
 python3.11 scripts/run_demo.py
 ```
 
+On Windows PowerShell, `python -X utf8 scripts/run_demo.py` runs the same standard-library
+launcher while Docker Desktop is in Linux container mode.
+
+For a real Gemini Supervisor, copy `.env.example` to `.env`, add your local key,
+and use `python -X utf8 scripts/run_demo.py --gemini`. The key file is mounted read-only
+only into Gateway, is excluded from images/Git, and is not provided to Agent or
+Executor. This demo still uses a mock Agent and a fixed read-only task.
+
 The Compose demo uses a mock Agent to read `README.md` from a sample workspace. It checks service health, verifies that the Executor rejects requests without a permit, and confirms that provenance records and consumed nonces survive a service restart. It also checks result redaction. Each run creates a fresh Compose project and removes its containers and volumes on success. Use `--keep` to retain the project for inspection.
 
 ## Documentation
@@ -20,4 +28,7 @@ The Compose demo uses a mock Agent to read `README.md` from a sample workspace. 
 - [Normal task and README prompt injection demo](docs/demo-guide.md)
 - [Agent model integration](docs/agent-integration.md)
 - [Evaluation workflow](docs/evaluation.md)
+- [Final evaluation and release evidence](reports/docs/evaluation.md)
+- [Release checklist](reports/release_checklist.md)
+- [Changelog](CHANGELOG.md)
 - [API contract](docs/api-contract.md)

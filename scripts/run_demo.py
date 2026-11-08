@@ -168,18 +168,20 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
-def run_demo(*, keep: bool) -> None:
+def run_demo(*, keep: bool, gemini: bool = False) -> None:
     project = "secure-demo-" + uuid4().hex[:10]
     prefix = [
         "docker", "compose", "--file", str(ROOT / "docker-compose.yml"),
-        "--project-name", project, "--profile", "demo",
     ]
+    if gemini:
+        prefix.extend(["--file", str(ROOT / "docker-compose.gemini.yml")])
+    prefix.extend(["--project-name", project, "--profile", "demo"])
     environment = {**os.environ, "DEMO_GATEWAY_PORT": "0"}
 
     def compose(*arguments: str, timeout: int = 90) -> str:
         completed = subprocess.run(
             [*prefix, *arguments], cwd=ROOT, env=environment, timeout=timeout,
-            text=True, capture_output=True, check=False,
+            text=True, encoding="utf-8", capture_output=True, check=False,
         )
         if completed.returncode:
             raise RuntimeError(
@@ -248,13 +250,14 @@ def run_demo(*, keep: bool) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--keep", action="store_true", help="Keep the isolated demo project.")
+    parser.add_argument("--gemini", action="store_true", help="Use the real Gemini Supervisor with a local .env secret.")
     parser.add_argument("--init-keys", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.init_keys:
         init_keys(Path("/app/issuer"), Path("/app/verifier"))
     else:
         try:
-            run_demo(keep=args.keep)
+            run_demo(keep=args.keep, gemini=args.gemini)
         except (RuntimeError, OSError, subprocess.TimeoutExpired, ValueError) as error:
             raise SystemExit(str(error)) from None
 

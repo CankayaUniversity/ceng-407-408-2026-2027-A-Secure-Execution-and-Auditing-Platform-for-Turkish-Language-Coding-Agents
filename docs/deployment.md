@@ -28,6 +28,24 @@ python3.11 scripts/run_demo.py
 
 The runner creates a uniquely named `secure-demo-...` Compose project with fresh named volumes. Docker assigns an available loopback port to the Gateway. A successful run exits with status 0 and prints the following status messages in Turkish.
 
+### Optional real Gemini Supervisor
+
+The default uses the fixed `ReadmeDemoSupervisor` for an offline, repeatable
+deployment check. To use the existing real Gemini adapter with the same remote
+Executor, prepare a local `.env` from `.env.example`, then run:
+
+```bash
+python scripts/run_demo.py --gemini
+```
+
+This adds `docker-compose.gemini.yml`. Only Gateway receives the read-only
+`/run/secrets/gemini.env` mount. The other two services receive no API key. Set
+`GEMINI_ENV_FILE` to another host file path if needed, or `GEMINI_MODEL` to an
+explicit available model; default is `gemini-3.1-flash-lite`. Missing credentials
+or an unknown provider fail startup. Provider errors yield REVIEW, not execution.
+The mock Agent has a 45-second Gateway timeout in this mode. API availability
+and quotas can make the live demo fail independently of deterministic tests.
+
 ```text
 Temiz Compose projesi secure-demo-<id>
 Gateway ve Executor hazır.

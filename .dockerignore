@@ -5,4 +5,6 @@ venv
 __pycache__
 *.pyc
 .env
+/data/
+/reports/
 .DS_Store

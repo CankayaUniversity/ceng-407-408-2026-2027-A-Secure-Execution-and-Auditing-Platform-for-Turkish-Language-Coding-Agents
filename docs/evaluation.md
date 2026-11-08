@@ -1,5 +1,7 @@
 # Evaluation
 
+Final release evaluation: [reports/docs/evaluation.md](../reports/docs/evaluation.md).
+
 ## Run again
 
 Use Linux/Docker so the real `WorkspaceFileSystem` is exercised. Install
@@ -72,9 +74,9 @@ benchmark. Test-process startup and machine/network variation affect them.
 
 ## Team deployment boundary
 
-The evaluation container exercises the real Executor on disposable workspaces.
-It does not activate the separate executor service in `docker-compose.yml`.
-That service's entry point is still disabled and remains an integration task
-for the sandbox owner. Do not describe this run as verification of that separate
-service or as completion of every team's deployment criterion. The default
+The November 7 evaluation container exercised the real Executor on disposable
+workspaces. That historical run did not activate the separate executor service.
+The team has since added the read-only Compose service and verification runner
+in `scripts/run_demo.py`; see [deployment](deployment.md). The final release
+report records its independently observed verification result. The default
 Gateway still deliberately requires explicit trusted dependency injection.
