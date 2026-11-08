@@ -37,6 +37,8 @@ This file does not by itself declare a release/tag published.
 - All six attack target calls are rejected by task scope before Supervisor.
 - Existing latency results are descriptive single-pass measurements, not a
   repeated statistical benchmark; live provider and network time are included.
+- The real Qwen README recheck returned the correct command with extra prose;
+  the strict command-only response-format requirement was not satisfied.
 - No multi-user authentication, task ownership service or public deployment is
   provided. Provider failure remains fail-closed as REVIEW.
 - Result verification is acknowledged in Gateway after the remote read returns;

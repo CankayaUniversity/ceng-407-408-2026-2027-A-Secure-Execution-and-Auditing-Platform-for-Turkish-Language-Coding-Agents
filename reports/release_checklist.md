@@ -1,19 +1,20 @@
-# v0.1.0 release kontrolü
+# v0.1.0 Release Checklist
 
-- [x] Ekip değişiklikleri `prototype_v1` dalından pullandı (`8f44b66`).
-- [x] Temiz GitHub klonu alındı; kişisel `.env` taşınmadı.
-- [x] ASR/TCR/FBR ve eşleştirilmiş latency kaynakları raporda açıklandı.
-- [x] Kaynak commit CI başarılı (`42425753518`).
-- [x] README, CHANGELOG ve bilinen sınırlamalar hazırlandı.
-- [x] Gemini Compose seçimi için startup/cleanup ve fail-closed testleri geçti.
-- [x] Tam Linux test takımı yeni yerel kodda başarılı: 707 test + 204 alt test, 8 demo testi.
-- [x] Temiz Compose demo ve restart kalıcılığı başarılı.
-- [x] Gerçek Gemini + Graph Inspector + Permit + ayrı Sandbox Executor birlikte doğrulandı.
-- [x] Metrikler kaynak JSONL'den yeniden hesaplanıp doğrulandı.
-- [x] Yerel `v0.1.0` etiketi doğrulanmış release commit'i için hazırlandı.
-- [ ] Ekip/kullanıcı son demo ve etiket hedefini onayladı.
-- [ ] Release commit'i ve etiket pushlandı, o commit'in CI'ı başarılı.
+- [x] Pull team changes from `prototype_v1` (`8f44b66`).
+- [x] Obtain a clean GitHub clone without a personal `.env`.
+- [x] Document ASR/TCR/FBR and paired latency sources.
+- [x] Verify successful baseline CI (`42425753518`).
+- [x] Prepare README, CHANGELOG, and known limitations.
+- [x] Verify Gemini Compose startup, shutdown, and fail-closed configuration tests.
+- [x] Pass Linux regression: 707 tests, 204 subtests, and eight demo login tests.
+- [x] Pass clean Compose deployment and restart persistence checks.
+- [x] Verify real Gemini, Graph Inspector, permits, and separate Sandbox Executor together.
+- [x] Recompute metrics from source JSONL and verify exact agreement.
+- [x] Prepare a local `v0.1.0` tag for the verified release commit.
+- [x] Include the supplementary Qwen recheck and English report updates in the local release commit/tag.
+- [ ] Obtain team/user approval of the final demo and tag target.
+- [ ] Push the release commit and tag, then verify CI for that published commit.
 
-Son iki adım uzaktaki teslim işlemleridir. Kullanıcı bu çalışma için push
-yapılmamasını istedi; kendiliğinden yayın yapılmaz. Testlerden biri bekliyorsa
-sürüm tamamlanmış olarak işaretlenmez.
+Publication requires user approval. The user requested no push during this
+preparation, so no remote release is created automatically. A pending or failed
+check must never be reported as completed.

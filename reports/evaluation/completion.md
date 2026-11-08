@@ -1,43 +1,41 @@
-# Kişi 4 — Gün 1–6 teslim durumu
+# Contributor 4 - Days 1-6 Delivery Summary
 
-7 Kasım 2026 tarihli yerel doğrulama. CI doğrulaması push sonrasında yapılmalı.
+Historical verification dated November 7, 2026. For the November 8 separate
+Executor and release verification, see `reports/docs/evaluation.md`.
 
-Bu dosya 7 Kasım koşusunun tarihsel özetidir. 8 Kasım ayrı Executor servisi ve
-sürüm doğrulamasının güncel sonucu için `reports/docs/evaluation.md` dosyasına bakın.
-
-| Gün | Kişisel teslim | Doğrulama |
+| Day | Deliverable | Verification |
 | --- | --- | --- |
-| 1 | SQLite audit, logger, pytest ve CI altyapısı | Repository/logger/Gateway audit testleri; gerçek çalıştırmalarda SQLite kayıtları |
-| 2 | Demo login, Policy senaryoları, Gateway–Executor–Audit bağlantısı | Linux Executor entegrasyonları ve demo login testleri |
-| 3 | Decision Engine, Policy–Supervisor sırası, kararların audit kaydı | Gerçek Gemini Supervisor çağrıları; offline ALLOW/DENY/REVIEW ve hata testleri |
-| 4 | NetworkX Graph Inspector, Decision Engine ve audit bağlantısı | Risk/eksik graph testleri; graph–audit–permit izleri |
-| 5 | Altı normal senaryo, ekipten altı saldırı, runner ve metrikler | Her iki çalıştırmada on iki JSON senaryosu yüklendi ve sonuçları kaydedildi |
-| 6 | On iki senaryo çalıştırması, metrik/Added Latency ve raporlar | `fixture/` ve `gemini/` sonuçları; altı gerçek süre çifti; 12/12 trace eşleşmesi |
+| 1 | SQLite audit, logger, pytest, and CI infrastructure | Repository/logger/Gateway tests and real SQLite records |
+| 2 | Demo login, Policy scenarios, Gateway-Executor-Audit integration | Linux Executor integration and demo login tests |
+| 3 | Decision Engine, Policy-Supervisor ordering, audited decisions | Real Gemini calls and offline ALLOW/DENY/REVIEW/error tests |
+| 4 | NetworkX Graph Inspector, Decision Engine and audit integration | Risk/missing-graph tests and graph/audit/permit traces |
+| 5 | Six benign and six team attack scenarios, runner and metrics | Twelve JSON scenarios loaded and recorded in both runs |
+| 6 | Twelve-case execution, paired latency and reports | Fixture/Gemini results, six measured pairs, 12/12 trace matches |
 
-## Gerçek Supervisor ile sonuç
+## Real-Supervisor results
 
 - Model: `gemini-3.1-flash-lite`.
-- Altı normal görev tamamlandı; altı saldırı hedefi Policy tarafından engellendi.
-- ASR: 0/6, %0. TCR: 6/6, %100. FBR: 0/6, %0.
-- Graph–audit–permit eşleşmesi: 12/12 senaryo.
-- Altı normal görevde güvenlik açık ortalama süre: 4277,10 ms.
-- Aynı görevlerin baseline ortalaması: 96,91 ms.
-- Ortalama Added Latency: 4180,19 ms, yaklaşık 4,18 saniye.
+- Six benign tasks completed; Policy blocked all six attack targets.
+- ASR: 0/6 (0%). TCR: 6/6 (100%). FBR: 0/6 (0%).
+- Graph/audit/permit correlation: 12/12 scenarios.
+- Secured mean over six benign tasks: 4277.10 ms.
+- Mean matched baseline: 96.91 ms.
+- Mean added latency: 4180.19 ms, approximately 4.18 seconds.
 
-Süreler tek geçişte ölçüldü ve model/ağ süresini içeriyor. Agent önerileri
-betiklenmiştir; canlı bir üretken agent'ın saldırıya uyma oranı ölçülmedi.
-Saldırı hedeflerinin Policy tarafından reddedilmesi Supervisor'a gönderilmelerini
-engeller. Bu sonuçlar modelin bütün saldırıları tespit ettiğini göstermez.
+Durations are single-pass observations including model/network time. Agent
+proposals were scripted; a live generative agent's injection susceptibility was
+not measured by this dataset. Policy rejects the attack targets before they
+reach Supervisor, so these results do not show that Gemini detected every attack.
 
-Test sayıları ve son doğrulama `test_summary.json` içindedir. Yeniden çalıştırma
-ve ölçüm yöntemi `docs/evaluation.md` dosyasında açıklanmıştır.
+The historical test counts are in `test_summary.json`. The reproduction method
+is described in `docs/evaluation.md`.
 
-## Ekipte kalan dağıtım işi
+## Deployment status at the time of measurement
 
-Ayrı Docker Executor servisinin entry point'i hâlâ kapalı. Bu servis için sandbox
-sorumlusunun entegrasyonu ve ekip kabul kontrolü gerekir. Mevcut değerlendirme,
-gerçek Executor'ı bir test konteynerinde geçici proje kopyalarıyla çalıştırdı;
-ayrı servisin tamamlandığı anlamına gelmez.
+On November 7, the separate Executor entry point was still disabled. These
+measurements exercised the real Executor in a test container with disposable
+workspaces, not the later separate-service deployment. That deployment has
+since been added and verified; consult the final report for current evidence.
 
-API anahtarı ve ham SQLite dosyaları Git dışında tutuldu. Bu yerel doğrulama yeni
-değişikliklerin GitHub Actions sonucu değildir; CI push sonrasında çalışabilir.
+API credentials and raw SQLite ledgers remain outside Git. Local verification
+is distinct from GitHub Actions verification of a published commit.
