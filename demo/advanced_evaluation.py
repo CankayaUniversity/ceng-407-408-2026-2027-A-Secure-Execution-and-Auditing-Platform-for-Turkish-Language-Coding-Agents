@@ -1,4 +1,4 @@
-"""Six advanced benign replays against real Gateway/Executor and optional Gemini.
+"""Nine advanced benign replays against real Gateway/Executor and optional Gemini.
 
 Uses disposable Linux workspaces. The original twelve-case dataset is unchanged.
 Agent steps are scripted; Supervisor calls and protected file operations are real.
@@ -50,14 +50,18 @@ def snapshot(workspace):
             and not {"__pycache__", ".pytest_cache"}.intersection(path.parts)}
 
 
-def run(output: Path, *, provider=None, interval=4.0):
+def run(output: Path, *, provider=None, interval=4.0, case_ids=None):
     if os.name != "posix":
         raise RuntimeError("Use Linux/Docker for real Executor file operations.")
     if output.exists():
         raise ValueError("Choose a new output directory.")
     scenarios = load_scenarios(ROOT / "demo/scenarios/advanced")
-    if len(scenarios) != 6 or any(s.kind != "benign" for s in scenarios):
-        raise ValueError("Expected six advanced benign cases.")
+    if len(scenarios) != 9 or any(s.kind != "benign" for s in scenarios):
+        raise ValueError("Expected nine advanced benign cases.")
+    if case_ids:
+        scenarios = [case for case in scenarios if case.id in case_ids]
+        if len(scenarios) != len(case_ids):
+            raise ValueError("Unknown or duplicate scenario selection.")
     output.mkdir(parents=True)
     ledger = output / "ledgers"
     ledger.mkdir()
@@ -110,9 +114,10 @@ def run(output: Path, *, provider=None, interval=4.0):
     graph = ProvenanceRepository(ledger / "audit-provenance.db").load_graph()
     summary = generate_reports(records, audit, graph, output, label="Advanced benign evaluation")
     methodology = {
+        "scenario_ids": [case.id for case in scenarios],
         "agent": "scripted multi-step proposals", "supervisor": provider._model if provider else "fixture",
         "execution": "real HTTP Gateway and Linux Executor in an evaluation container, not the read-only remote service",
-        "dataset": "six additional benign cases; original twelve-case reports unchanged",
+        "dataset": "nine additional benign cases; original twelve-case reports unchanged",
         "safety": "fresh per-case workspaces, explicit grants, signed one-use permits; original tests/config/fake secret unchanged",
         "seeded_file": "existing empty tests/unit/test_extended_login.py; no new-file capability implied",
         "latency": "includes intentional API pacing; not a performance benchmark or Added Latency measurement",
@@ -132,10 +137,11 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--supervisor", choices=["gemini", "fixture"], default="gemini")
     parser.add_argument("--env-file", type=Path)
+    parser.add_argument("--case", action="append", dest="case_ids")
     args = parser.parse_args()
     provider = GeminiClient(env_file=args.env_file) if args.supervisor == "gemini" else None
     try:
-        print(json.dumps(run(args.output, provider=provider)), flush=True)
+        print(json.dumps(run(args.output, provider=provider, case_ids=args.case_ids)), flush=True)
     finally:
         if provider:
             provider.close()

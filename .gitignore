@@ -23,3 +23,6 @@ __pycache__/
 /reports/evaluation/adversarial/*/scenario_results.json
 /reports/evaluation/adversarial/*/audit_graph_validation.json
 
+
+/reports/evaluation/extension/*/scenario_results.json
+/reports/evaluation/extension/*/audit_graph_validation.json
