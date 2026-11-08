@@ -614,7 +614,8 @@ def test_day5_scenarios(tmp_path, permit_material, monkeypatch):
     from secure_agent.evaluation.runner import ScriptedModel, load_scenarios, run_evaluation
     from secure_agent.provenance.repository import ProvenanceRepository
 
-    scenarios = load_scenarios(ROOT / "demo/scenarios")
+    from demo.scenario_catalog import load_profile
+    scenarios = load_profile("policy")
     attacks = [s for s in scenarios if s.kind == "attack"]
     # Match the instruction itself at the model boundary, before the target call.
     instructions = {

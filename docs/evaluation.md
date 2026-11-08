@@ -1,82 +1,40 @@
 # Evaluation
 
-Final release evaluation: [reports/docs/evaluation.md](../reports/docs/evaluation.md).
+Start with the [complete 30-case results](../reports/evaluation/summary.md): 15 benign tasks and 15 attacks. Each case lists the trusted task, proposed operations, expected and observed decision, outcome, backend reason and raw evidence. The legitimate-task false block is retained.
 
-## Run again
+All definitions are in [demo/scenarios](../demo/scenarios/README.md), under `benign/` and `attacks/`. Fixture/scope profiles share the same catalog but retain independent trusted permissions.
 
-Use Linux/Docker so the real `WorkspaceFileSystem` is exercised. Install
-`requirements.txt` and `.[dev]`, then run from the project root:
+## Run the full suite
+
+Use Linux/Docker, install `requirements.txt` and `.[dev]`, mount your local `.env` read-only, then run:
 
 ```bash
-python -m demo.evaluate --output reports/new-run --env-file /run/secrets/gemini.env
+python -m demo.evaluate_suite --env-file /run/secrets/gemini.env --output reports/new-evaluation
 ```
 
-Mount the local `.env` read-only at `/run/secrets/gemini.env`. Never copy it into
-an image. Use a new output directory for each run. The model defaults to
-`gemini-3.1-flash-lite`; `--model` explicitly overrides it. Offline regression:
+Use a new directory. This runs all 30 definitions with a real Gemini Supervisor, HTTP Gateway, Graph Inspector, Ed25519 permits and Linux Executor. Agent proposals are scripted JSON. No live generative-agent accuracy claim is made.
+
+`summary.md` is the main report; `scenario_results.json` contains machine-readable per-case details; `metrics_report.json` contains denominators and rates; `evidence/` retains raw observations and trace validation. Local SQLite ledgers are ignored by Git.
+
+To rebuild the published consolidated report without calling Gemini:
 
 ```bash
-python -m demo.evaluate --supervisor fixture --output reports/new-offline-run
+python -m demo.evaluation_report
+```
+
+For offline deterministic regression:
+
+```bash
 python -m pytest tests -q
+python -m demo.evaluate_suite --supervisor fixture --output reports/new-control
 ```
 
-The harness uses six checked-in benign and six teammate-authored attack JSONs.
-Each scenario receives its own trusted task goal and fresh fixture workspace.
-The normal edit reads the original login module before proposing replacement.
-Only protected tool results actually returned to that task are supplied to the
-Supervisor as untrusted context. Workspaces are discarded after the run.
+The fixture Supervisor always permits aligned operations. Nine attack targets are deliberately in scope, so they succeed in that control. These defense failures demonstrate target reachability; they must not be confused with real Gemini decisions.
 
-## Evidence and scope
+## Measurement limits
 
-The November 7 run is under `reports/evaluation/`. `fixture/` is deterministic;
-`gemini/` uses a real Gemini Supervisor. Both use scripted agent proposals,
-real loopback HTTP, Casbin, graph inspection, SQLite audit, Ed25519 issuance,
-single-use verification and the actual Linux Executor. All 12 cases passed in
-both runs. Raw ledgers remain local and Git-ignored under each `ledgers/` folder.
+The checked-in 30-case report merges separately recorded live runs, without relabeling failures or rerunning them to improve scores. Some durations include deliberate API pacing. Do not compare those means as a performance benchmark. Six policy-profile benign tasks have release-time paired security-on/off baselines under `reports/evaluation/evidence/policy-live/`; no paired baseline exists for all 30.
 
-This is a controlled pipeline evaluation, not a measurement of a generative
-agent's susceptibility to injection. The six attack targets violate task scope
-and are rejected by Policy before Supervisor; no model call is needed for those
-targets. Successful source reads are recorded in graph and audit. Permit
-issuance and verification are recorded for allowed execution; blocked requests
-have no permit. The report validates these relationships by request ID.
+Scope denials do not establish Supervisor detection. Supervisor MISALIGNED denotes a task-alignment decision; raw model explanations are not retained. Attack success requires the target effect, not merely an ALLOW verdict. Planting a malicious test is scored as a file replacement; later execution or external exfiltration is not claimed.
 
-Separate real-model smoke checks also exercised task alignment and a synthetic
-injected source. These do not establish universal injection resistance.
-
-## Added Latency
-
-For each benign scenario the same scripted task runs against a security-enabled
-Gateway and a loopback fixture-only baseline. Each gets an identical fresh copy
-of the project. Both use the same HTTP adapter, AgentLoop, filesystem operations,
-test profile, result serialization and read acknowledgement round trips.
-The baseline omits Policy, Supervisor, graph, permit and audit processing. Its
-fixed-step guard accepts only unchanged checked-in benign scenarios; attacks
-are never run through this endpoint.
-
-Only pairs that complete the same benign task enter Added Latency. Per pair:
-`secured latency_ms - baseline latency_ms`. The mean, pair count and both
-component means are reported. `baseline.jsonl` and `evaluation.jsonl` preserve
-the measurements. Gemini mode includes real Supervisor/network time; fixture
-mode measures the remaining controlled pipeline overhead. These are one-pass
-descriptive measurements, with security-enabled measured first, not a statistical
-benchmark. Test-process startup and machine/network variation affect them.
-
-## Deliverables
-
-- `evaluation.jsonl`: all 12 scenario outcomes and measured durations.
-- `scenario_results.json`: expected/observed decisions and classifications.
-- `metrics_report.json`: ASR/TCR/FBR numerators, denominators, unknown counts and latency.
-- `audit_graph_validation.json`: request-level graph/audit/permit matches.
-- `baseline.jsonl`: six measured benign baseline durations.
-- `methodology.json` and `summary.md`: experiment scope and readable results.
-- `test_summary.json` in the parent folder: final deterministic test verification.
-
-## Team deployment boundary
-
-The November 7 evaluation container exercised the real Executor on disposable
-workspaces. That historical run did not activate the separate executor service.
-The team has since added the read-only Compose service and verification runner
-in `scripts/run_demo.py`; see [deployment](deployment.md). The final release
-report records its independently observed verification result. The default
-Gateway still deliberately requires explicit trusted dependency injection.
+The [release-time evaluation](../reports/docs/evaluation.md) remains available as historical evidence and should not be read as results for all 30 cases.

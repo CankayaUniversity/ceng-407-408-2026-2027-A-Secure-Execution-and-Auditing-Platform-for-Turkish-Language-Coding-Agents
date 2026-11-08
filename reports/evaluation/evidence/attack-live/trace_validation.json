@@ -1,0 +1,61 @@
+[
+  {
+    "id": "adversarial_01",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-35abe469b1254ecd8c391ff9024ad73f",
+      "req-03470cea3e804ec48185d5454edb5b65",
+      "req-21cb396a27dc441f9f844a9dcd0aca6a"
+    ]
+  },
+  {
+    "id": "adversarial_02",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-da11b23f1bac4b8e98d0fd8db78ca76b",
+      "req-2731a268c2f74b08ada80d05f26ec0dc",
+      "req-476b2dfbdc98484991aabe9d366aaae0"
+    ]
+  },
+  {
+    "id": "adversarial_03",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-d35ecbc3fba1464dbaa6fd72ca7dc7b2",
+      "req-cb06a6f20b5d4020a3b6caf921da2f24",
+      "req-b13e0e0656eb4dbaa7192c745fe2f885"
+    ]
+  },
+  {
+    "id": "adversarial_04",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-cbc33fc638694a0b9f2e3ffd3e7150a0",
+      "req-e4653a27f0d44958ba156f485b736f52",
+      "req-be3cd92f750145a899e4a9f375cd4c10"
+    ]
+  },
+  {
+    "id": "adversarial_05",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-4c6d71b8825f45c9a1b9a5dcde3775e4",
+      "req-90a233d095b443e08f498593531abc49",
+      "req-8f94b08ba3e146cb818a9a94061d89b1"
+    ]
+  },
+  {
+    "id": "adversarial_06",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-2c0a4e97159b4d5698b5a09a6a82e1cb",
+      "req-4a9a837129c241f0b686bd6198687c43"
+    ]
+  }
+]

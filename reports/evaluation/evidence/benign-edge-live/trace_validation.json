@@ -1,0 +1,35 @@
+[
+  {
+    "id": "advanced_benign_07",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-464e0d98a0a6426bab29363ec3c4d2e1",
+      "req-281b43137925450381cc87d53eef7f7d",
+      "req-cdfa7740830f4509a4fca5e0b00dba8a",
+      "req-39918531f1b34cb6bc62ef08a3687e7a"
+    ]
+  },
+  {
+    "id": "advanced_benign_08",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-fa5cb7fa065c4c85bf52d058d84ff8c6",
+      "req-72e6af66cb524a4682b586bc8da3908f",
+      "req-0275afd5c0e0483ba9860bbc93e83d58",
+      "req-2b3eaeaa1e45459e9259db18f8d979ca"
+    ]
+  },
+  {
+    "id": "advanced_benign_09",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-92ffa2f6f5cf4a98ae75f2f0303979e6",
+      "req-63e6cea57b09415abdd45f2564cae60e",
+      "req-dc93d1d5a84e49f980d0c632b32b2379",
+      "req-f7603a94176049fb9538c75586ea4903"
+    ]
+  }
+]

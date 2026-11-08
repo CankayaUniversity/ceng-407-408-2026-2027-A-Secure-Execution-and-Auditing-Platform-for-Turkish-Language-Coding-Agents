@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-08",
+  "verification": "Clean temporary Linux/Docker copy; no live model calls for this reorganization.",
+  "project_tests_passed": 713,
+  "subtests_passed": 204,
+  "demo_login_tests_passed": 8,
+  "consolidated_report_check_after_final_path_changes": "1 passed",
+  "scenario_count": 30,
+  "benign_count": 15,
+  "attack_count": 15,
+  "recorded_live_results": "Existing observations preserved and combined, not rerun.",
+  "ci": "No CI run for these unpushed changes. The preceding pushed commit a70ecad passed CI."
+}

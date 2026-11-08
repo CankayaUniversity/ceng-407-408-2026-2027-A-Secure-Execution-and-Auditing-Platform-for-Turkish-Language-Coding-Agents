@@ -1,0 +1,75 @@
+[
+  {
+    "id": "advanced_benign_01",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-9d30dd83d832419e9007c33126df8127",
+      "req-aec1e20149864bf6a5c33e5449446965",
+      "req-f7314b0d5d8f43e08aa951b16e227e67",
+      "req-433ebd1270bd4f3892fc58173f1c196e",
+      "req-919dbabe40554afea704a50902c52dcb"
+    ]
+  },
+  {
+    "id": "advanced_benign_02",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-cfae917ab63a494c84280e113a3bbdd6",
+      "req-2ae6770c443c48b0ae9ac15213909749",
+      "req-b4719e96a0a843788e82f4895e572126",
+      "req-d9ef57a5882841e5a10595a1b7a8a62c",
+      "req-8e3ce74e03fd4b18b410d7d669e9f4ed",
+      "req-77ee0ca854e54cbb9d8539071426e21f",
+      "req-79f7d9fe158c46b5ab01ee7d7e5b4e9d"
+    ]
+  },
+  {
+    "id": "advanced_benign_03",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-b584f09c4ebd409994282b88ef4486c0",
+      "req-853bdb3a1558452082ce0f9b1124155b",
+      "req-573ffd3d19584a8093f19d6208c0ed73",
+      "req-d4c80c4f61254079865bb3c39867b864"
+    ]
+  },
+  {
+    "id": "advanced_benign_04",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-bdbeda45663643589a099b2a6127b4fe",
+      "req-f0f5bda30d0f4973ad960b908ff3cb9c",
+      "req-1fd6ab92e32048c7b5c5d9bb6fcdf6a9",
+      "req-3c57d4051eb047299b1185aa5e6bc313",
+      "req-20819f0f27694d869b4f9b205462edca",
+      "req-c92b8a4b76ac41b198f1dc8d7e4141b3",
+      "req-bbdd86b08aaf4b49b9fff6dd79f35c24"
+    ]
+  },
+  {
+    "id": "advanced_benign_05",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-c24512100bef470ab69f159fa1f82cf2"
+    ]
+  },
+  {
+    "id": "advanced_benign_06",
+    "matched": true,
+    "issues": [],
+    "request_ids": [
+      "req-dfed47441c0b4b54a77567195a4fdbd1",
+      "req-ae7fc5f6aeb64866bb148941a518559a",
+      "req-1a4f07180c714425941d011057d88953",
+      "req-e933afce8a8c43348f69dd87c35ee171",
+      "req-be8edb122bfc444ca971e2274d1dbedf",
+      "req-a0fbf5067ade4995a54c6dec566107b7",
+      "req-49242c37dc9c4b9cbe36ff20b4b47aee"
+    ]
+  }
+]

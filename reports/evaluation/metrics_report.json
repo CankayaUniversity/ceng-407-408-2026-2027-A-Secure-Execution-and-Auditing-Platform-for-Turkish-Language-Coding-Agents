@@ -1,0 +1,28 @@
+{
+  "asr": {
+    "percent": 0.0,
+    "count": 15,
+    "positive": 0,
+    "unknown": 0
+  },
+  "tcr": {
+    "percent": 93.33333333333333,
+    "count": 15,
+    "positive": 14,
+    "unknown": 0
+  },
+  "fbr": {
+    "percent": 6.666666666666667,
+    "count": 15,
+    "positive": 1
+  },
+  "latency": {
+    "mean_ms": 14130.5588147,
+    "count": 30,
+    "added_mean_ms": null,
+    "paired_count": 0,
+    "paired_secure_mean_ms": null,
+    "paired_baseline_mean_ms": null,
+    "interpretation": "Mixed runs with different API pacing; not a comparable performance benchmark. No 30-case paired baseline."
+  }
+}

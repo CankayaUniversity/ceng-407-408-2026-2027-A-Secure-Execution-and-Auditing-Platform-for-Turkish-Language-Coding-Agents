@@ -34,7 +34,7 @@ Each scenario has an independently registered trusted goal and fresh workspace.
 Both runs contain 12 results: six benign tasks completed and six attack targets
 were blocked. Neither run contains inconclusive attack outcomes or infrastructure
 errors affecting classification. Sources are under
-`reports/evaluation/fixture/` and `reports/evaluation/gemini/`.
+`reports/evaluation/evidence/policy-control/` and `reports/evaluation/evidence/policy-live/`.
 
 ## 3. Security metrics
 
@@ -135,7 +135,7 @@ model's final answer.
 `contains_command=true` but `command_only=false`; strict command-only compliance
 was not counted as successful.
 
-Evidence: `reports/evaluation/live_agent.json`. This supplementary pilot used a
+Evidence: `reports/evaluation/evidence/release-verification/live_agent.json`. This supplementary pilot used a
 fixed ALIGNED Supervisor and test-owned Windows filesystem snapshots. Real
 Gemini and Linux/separate-Executor checks are independent experiments, not one
 combined run. The same model weights were verified, but the earlier llama.cpp
@@ -165,3 +165,7 @@ A local `v0.1.0` tag was prepared for the verified release commit. The user has
 requested no push. Team approval, CI for the published release commit, and tag
 publication remain delivery steps. The supplementary recheck and English report
 updates are included in the local release preparation; remote publication is pending.
+
+## Complete scenario catalog
+
+The current 30-case consolidated report is [reports/evaluation/summary.md](../evaluation/summary.md). The measurements above remain the release-time evidence.

@@ -29,6 +29,7 @@ from secure_agent.audit.repository import AuditRepository
 from secure_agent.common.schemas import Task, ToolCall, ToolResult
 from secure_agent.evaluation.report import generate_reports
 from secure_agent.evaluation.runner import evaluate, load_scenarios
+from demo.scenario_catalog import load_profile
 from secure_agent.execution.executor import Executor
 from secure_agent.execution.test_runner import TestRunner, TestRunResult
 from secure_agent.gateway.main import create_app
@@ -122,7 +123,7 @@ def setup(workspace, scenario, nonce_database):
 
 def baseline_app(scenario, workspace, runner):
     """Trusted benign replay only: no Policy/Supervisor/graph/permit/audit work."""
-    trusted = {item.id: item for item in load_scenarios(ROOT / "demo/scenarios") if item.kind == "benign"}
+    trusted = {item.id: item for item in load_profile("policy") if item.kind == "benign"}
     original = trusted.get(scenario.id)
     if original is None or scenario.model_dump(exclude={"task_id"}) != original.model_dump(exclude={"task_id"}):
         raise ValueError("Baseline requires an unchanged, checked-in benign scenario.")
@@ -174,7 +175,7 @@ def run(output, *, provider=None, baseline=True):
         raise RuntimeError("Use Linux/Docker to exercise the real POSIX Executor filesystem.")
     if output.exists():
         raise ValueError("Use a new output directory to preserve earlier evidence.")
-    scenarios = load_scenarios(ROOT / "demo/scenarios")
+    scenarios = load_profile("policy")
     if len(scenarios) != 12 or sum(s.kind == "benign" for s in scenarios) != 6:
         raise ValueError("Expected exactly six benign and six attack scenarios.")
     output.mkdir(parents=True)
@@ -216,7 +217,7 @@ def run(output, *, provider=None, baseline=True):
                    and any(row["id"] == base["id"] and row["task_completed"] for row in records)}
     graph = ProvenanceRepository(ledger / "audit-provenance.db").load_graph()
     summary = generate_reports(records, AuditRepository(database), graph, output,
-                               baseline_ms=baseline_ms, label="Evaluation — scripted agent, " +
+                               baseline_ms=baseline_ms, label="Evaluation â€” scripted agent, " +
                                (provider._model + " Supervisor" if provider else "fixture Supervisor"))
     (output / "baseline.jsonl").write_text("".join(json.dumps(row) + "\n" for row in baselines), encoding="utf-8")
     methodology = {

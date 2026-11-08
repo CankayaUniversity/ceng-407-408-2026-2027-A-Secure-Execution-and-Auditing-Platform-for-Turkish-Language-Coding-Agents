@@ -66,7 +66,7 @@ from model context, final answers, and ledgers. This pilot uses a fixed ALIGNED
 Supervisor and Windows fixture snapshots; real Gemini/separate-Executor
 verification is a different run.
 
-Machine-readable evidence: [live_agent.json](../reports/evaluation/live_agent.json).
+Machine-readable evidence: [live_agent.json](../reports/evaluation/evidence/release-verification/live_agent.json).
 It records the model hash, llama.cpp image digest, and runtime parameters. The
 earlier server build was not pinned, so binary-identical reproduction is not
 claimed. This single README pair is not included in the 12-scenario metric dataset.
